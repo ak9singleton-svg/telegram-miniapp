@@ -25,31 +25,43 @@ if (!BOT_TOKEN || !ADMIN_ID || !SUPABASE_URL || !SUPABASE_KEY) {
 // API: Отправка заказа в Telegram (безопасно на сервере)
 app.post('/api/send-order', async (req, res) => {
   try {
-    const { orderData, userId, userName } = req.body;
+    const { 
+      orderId, 
+      date, 
+      customerName, 
+      customerPhone, 
+      customerComment,
+      telegramUserId, 
+      telegramUsername, 
+      items, 
+      total,
+      paymentEnabled,
+      kaspiPhone,
+      kaspiLink
+    } = req.body;
 
-    if (!orderData || !userId) {
+    if (!orderId || !items || !total) {
       return res.status(400).json({ error: 'Неверные данные заказа' });
     }
 
-    // Формируем сообщение
-    let message = `🛍 <b>НОВЫЙ ЗАКАЗ</b>\n\n`;
-    message += `👤 <b>Клиент:</b> ${orderData.name}\n`;
-    message += `📱 <b>Телефон:</b> ${orderData.phone}\n`;
+    // Формируем красивое сообщение админу (как было раньше!)
+    let message = "🆕 <b>НОВЫЙ ЗАКАЗ!</b>\n\n";
+    message += `📋 Заказ #${orderId.slice(-6)}\n`;
+    message += `📅 ${new Date(date).toLocaleString('ru-RU')}\n\n`;
     
-    if (orderData.comment) {
-      message += `💬 <b>Комментарий:</b> ${orderData.comment}\n`;
-    }
+    message += "<b>👤 Клиент:</b>\n";
+    message += `Имя: ${customerName}\n`;
+    message += `Телефон: ${customerPhone}\n`;
+    if (telegramUsername) message += `Telegram: @${telegramUsername}\n`;
+    if (telegramUserId) message += `ID: ${telegramUserId}\n`;
+    if (customerComment) message += `\nКомментарий: ${customerComment}\n`;
     
-    message += `\n📦 <b>Заказ:</b>\n`;
-    orderData.items.forEach(item => {
+    message += "\n<b>🛒 Товары:</b>\n";
+    items.forEach(item => {
       message += `• ${item.name} x${item.quantity} = ${item.price * item.quantity} ₸\n`;
     });
     
-    message += `\n💰 <b>ИТОГО: ${orderData.total} ₸</b>\n`;
-    message += `\n🆔 Telegram ID: ${userId}`;
-    if (userName) {
-      message += `\n👤 Username: @${userName}`;
-    }
+    message += `\n<b>💰 Итого: ${total} ₸</b>`;
 
     // Отправляем в Telegram админу
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -58,21 +70,36 @@ app.post('/api/send-order', async (req, res) => {
       parse_mode: 'HTML'
     });
 
-    // Если включены платежи, отправляем реквизиты клиенту
-    if (orderData.kaspi_phone) {
-      const paymentMessage = `✅ <b>Ваш заказ принят!</b>\n\n` +
-        `Спасибо за заказ! Мы скоро свяжемся с вами.\n\n` +
-        `💳 <b>Реквизиты для оплаты Kaspi:</b>\n` +
-        `📱 ${orderData.kaspi_phone}\n` +
-        `💰 Сумма: ${orderData.total} ₸\n\n` +
-        (orderData.kaspi_link ? `🔗 <a href="${orderData.kaspi_link}">Оплатить по ссылке</a>\n\n` : '') +
-        `После оплаты, пожалуйста, отправьте скриншот чека в бот.`;
+    // Если включены платежи и есть telegram_user_id, отправляем реквизиты клиенту
+    if (paymentEnabled && telegramUserId) {
+      let paymentMessage = "💳 <b>Реквизиты для оплаты / Төлем деректемелері</b>\n\n";
+      paymentMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
+      paymentMessage += `💰 Сумма / Сомасы: <b>${total} ₸</b>\n\n`;
+      
+      if (kaspiPhone) {
+        paymentMessage += `📱 <b>Kaspi номер:</b>\n+7${kaspiPhone}\n\n`;
+      }
+      
+      paymentMessage += "После оплаты, пожалуйста, отправьте скриншот чека владельцу магазина.\n";
+      paymentMessage += "Төлегеннен кейін чектің скриншотын дүкен иесіне жіберіңіз.\n\n";
+      paymentMessage += "Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️";
 
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        chat_id: userId,
+      const payload = {
+        chat_id: telegramUserId,
         text: paymentMessage,
         parse_mode: 'HTML'
-      });
+      };
+
+      // Добавляем кнопку Kaspi если есть ссылка
+      if (kaspiLink) {
+        payload.reply_markup = {
+          inline_keyboard: [[
+            { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+          ]]
+        };
+      }
+
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, payload);
     }
 
     res.json({ success: true, message: 'Заказ успешно отправлен' });
@@ -91,15 +118,42 @@ app.post('/api/notify-status', async (req, res) => {
   try {
     const { userId, status, orderNumber, shopPhone } = req.body;
 
-    const statusMessages = {
-      processing: '⏳ Ваш заказ #{orderNumber} принят в работу!',
-      completed: '✅ Ваш заказ #{orderNumber} готов! Можете забрать.',
-      cancelled: '❌ Ваш заказ #{orderNumber} отменён.\n\nПо вопросам звоните: {shopPhone}'
-    };
+    if (!userId || !status || !orderNumber) {
+      return res.status(400).json({ error: 'Неверные данные' });
+    }
 
-    let message = statusMessages[status] || 'Статус вашего заказа изменён';
-    message = message.replace('{orderNumber}', orderNumber);
-    message = message.replace('{shopPhone}', shopPhone || '');
+    let message = '';
+    
+    switch (status) {
+      case 'processing':
+        message = `⏳ <b>Ваш заказ принят в работу! / Тапсырысыңыз орындалуда!</b>\n\n`;
+        message += `📋 Заказ / Тапсырыс #${orderNumber}\n`;
+        message += `Мы начали готовить ваш заказ. Скоро он будет готов! 👨‍🍳\n`;
+        message += `Тапсырысыңызды дайындауды бастадық. Жақында дайын болады!`;
+        break;
+        
+      case 'completed':
+        message = `🎉 <b>Ваш заказ готов! / Тапсырысыңыз дайын!</b>\n\n`;
+        message += `📋 Заказ / Тапсырыс #${orderNumber}\n`;
+        message += `Можете забирать или ожидайте курьера! 🚗\n`;
+        message += `Алып кетуге болады немесе курьерді күтіңіз!\n\n`;
+        message += `Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️`;
+        break;
+        
+      case 'cancelled':
+        message = `❌ <b>Ваш заказ отменён / Тапсырысыңыз жойылды</b>\n\n`;
+        message += `📋 Заказ / Тапсырыс #${orderNumber}\n`;
+        message += `К сожалению, мы не можем выполнить ваш заказ. Приносим извинения.\n`;
+        message += `Өкінішке орай, тапсырысыңызды орындай алмаймыз. Кешірім сұраймыз.\n\n`;
+        if (shopPhone) {
+          message += `Если у вас есть вопросы, свяжитесь с нами: ${shopPhone}\n`;
+          message += `Сұрақтарыңыз болса, бізбен хабарласыңыз: ${shopPhone}`;
+        }
+        break;
+        
+      default:
+        return res.status(400).json({ error: 'Неверный статус' });
+    }
 
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       chat_id: userId,
@@ -127,7 +181,16 @@ app.get('/api/config', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok',
-    configured: !!(BOT_TOKEN && ADMIN_ID && SUPABASE_URL && SUPABASE_KEY)
+    botConfigured: !!BOT_TOKEN,
+    supabaseConfigured: !!(SUPABASE_URL && SUPABASE_KEY),
+    adminConfigured: !!ADMIN_ID
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    botConfigured: !!BOT_TOKEN
   });
 });
 
