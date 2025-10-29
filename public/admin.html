@@ -57,6 +57,8 @@
         shop_logo: '',
         payment_enabled: false
       });
+      
+      const [orderFilter, setOrderFilter] = useState('all');
 
       useEffect(() => {
         if (window.Telegram?.WebApp) {
@@ -306,6 +308,21 @@
         }
       };
 
+      // Фильтрация заказов
+      const filteredOrders = orders.filter(order => {
+        if (orderFilter === 'all') return true;
+        return order.status === orderFilter;
+      });
+
+      // Подсчёт заказов по статусам
+      const orderCounts = {
+        all: orders.length,
+        new: orders.filter(o => o.status === 'new').length,
+        processing: orders.filter(o => o.status === 'processing').length,
+        completed: orders.filter(o => o.status === 'completed').length,
+        cancelled: orders.filter(o => o.status === 'cancelled').length
+      };
+
       if (loading) {
         return (
           <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -367,11 +384,97 @@
 
           {activeTab === 'orders' && (
             <div className="p-4">
-              {orders.length === 0 ? (
-                <div className="text-center py-12"><p className="text-gray-500">Заказов пока нет</p></div>
+              {/* Фильтры заказов */}
+              <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                <button
+                  onClick={() => setOrderFilter('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
+                    orderFilter === 'all'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  Все
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    orderFilter === 'all' ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {orderCounts.all}
+                  </span>
+                </button>
+                
+                <button
+                  onClick={() => setOrderFilter('new')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
+                    orderFilter === 'new'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  🆕 Новые
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    orderFilter === 'new' ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {orderCounts.new}
+                  </span>
+                </button>
+                
+                <button
+                  onClick={() => setOrderFilter('processing')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
+                    orderFilter === 'processing'
+                      ? 'bg-yellow-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  ⏳ В работе
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    orderFilter === 'processing' ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {orderCounts.processing}
+                  </span>
+                </button>
+                
+                <button
+                  onClick={() => setOrderFilter('completed')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
+                    orderFilter === 'completed'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  ✅ Выполнено
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    orderFilter === 'completed' ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {orderCounts.completed}
+                  </span>
+                </button>
+                
+                <button
+                  onClick={() => setOrderFilter('cancelled')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
+                    orderFilter === 'cancelled'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  ❌ Отменено
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    orderFilter === 'cancelled' ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {orderCounts.cancelled}
+                  </span>
+                </button>
+              </div>
+
+              {filteredOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-4xl mb-2">📦</p>
+                  <p className="text-gray-500">Заказов нет</p>
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {orders.map(order => (
+                  {filteredOrders.map(order => (
                     <div key={order.id} className="bg-white rounded-lg p-4 shadow-sm">
                       <div className="flex items-start justify-between mb-3">
                         <div>
