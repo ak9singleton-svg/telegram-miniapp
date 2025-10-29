@@ -161,9 +161,19 @@
       // Инициализация Supabase и Telegram
       useEffect(() => {
         const initApp = async () => {
-          // Получаем конфиг с сервера
-          try {
-            const response = await fetch(`${API_URL}/api/config`);
+  try {
+    // Ждем загрузки Supabase библиотеки
+    let attempts = 0;
+    while (!window.supabase && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
+    if (!window.supabase) {
+      throw new Error('Supabase library failed to load');
+    }
+
+    const response = await fetch(`${API_URL}/api/config`);
             const config = await response.json();
             
             // Инициализируем Supabase
