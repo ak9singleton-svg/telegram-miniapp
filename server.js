@@ -229,8 +229,10 @@ async function handleWebhook(req, res) {
       const text = message.text;
       const userId = message.from.id;
 
-      // Команда /start
-      if (text === '/start') {
+      // Обработка текстовых команд (только если есть text)
+      if (text) {
+        // Команда /start
+        if (text === '/start') {
         const firstName = message.from.first_name || 'друг';
         const keyboard = {
           keyboard: [
@@ -455,7 +457,7 @@ async function handleWebhook(req, res) {
       }
 
       // Обычный ответ на текст
-      if (text && !text.startsWith('/')) {
+      if (!text.startsWith('/')) {
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
           chat_id: chatId,
           text: `Я бот-помощник кондитерской! 🤖\nНажмите '📦 Кондитерская' чтобы сделать заказ.`
@@ -463,6 +465,7 @@ async function handleWebhook(req, res) {
         
         return res.json({ ok: true });
       }
+      } // Конец блока if (text)
 
       // Обработка фото (чек от клиента)
       if (message.photo && pendingReceipts.has(`waiting_${chatId}`)) {
