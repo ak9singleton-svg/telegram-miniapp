@@ -589,25 +589,33 @@ async function handleWebhook(req, res) {
           .single();
 
         if (order && order.telegram_user_id) {
-          // Уведомляем клиента
+          // ВАЖНО: Восстанавливаем флаг ожидания чека
+          pendingReceipts.set(`waiting_${order.telegram_user_id}`, orderId);
+          
+          // Уведомляем клиента с кнопкой для повторной отправки
           await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             chat_id: order.telegram_user_id,
-            text: `❌ <b>Чек не принят</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nПожалуйста, отправьте корректный чек или свяжитесь с нами.`,
-            parse_mode: 'HTML'
+            text: `❌ <b>Чек не принят</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nПожалуйста, отправьте корректный чек или свяжитесь с нами.\n\n🇰🇿 <b>Чек қабылданбады</b>\n\nДұрыс чекті жіберіңіз немесе бізбен хабарласыңыз.`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '📸 Отправить чек заново', callback_data: `receipt_${orderId}` }
+              ]]
+            }
           });
         }
 
         // Отвечаем админу
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
           callback_query_id: callbackQuery.id,
-          text: '❌ Чек отклонён'
+          text: '❌ Чек отклонён. Клиент может отправить новый.'
         });
 
         // Редактируем сообщение
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
           chat_id: ADMIN_ID,
           message_id: messageId,
-          caption: callbackQuery.message.caption + '\n\n❌ <b>ЧЕК ОТКЛОНЁН</b>',
+          caption: callbackQuery.message.caption + '\n\n❌ <b>ЧЕК ОТКЛОНЁН</b>\n(Клиент может отправить новый)',
           parse_mode: 'HTML'
         });
       }
