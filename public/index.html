@@ -58,6 +58,7 @@
         paymentNote: "После оформления заказа мы отправим вам реквизиты для оплаты в Kaspi",
         hello: "Привет",
         orderStatuses: {
+          pending_payment: "Ожидает оплаты",
           new: "Новый",
           processing: "В работе",
           completed: "Выполнен",
@@ -89,6 +90,7 @@
         paymentNote: "Тапсырысты рәсімдегеннен кейін Kaspi-де төлеу үшін деректемелерді жібереміз",
         hello: "Сәлем",
         orderStatuses: {
+          pending_payment: "Төлем күтілуде",
           new: "Жаңа",
           processing: "Орындалуда",
           completed: "Орындалды",
@@ -316,7 +318,10 @@
               telegramUserId: order.telegram_user_id,
               telegramUsername: order.telegram_username,
               items: order.items,
-              total: order.total
+              total: order.total,
+              paymentEnabled: settings?.payment_enabled || false,
+              kaspiPhone: settings?.kaspi_phone || '',
+              kaspiLink: settings?.kaspi_link || ''
             })
           });
         } catch (error) {
@@ -346,7 +351,7 @@
           telegram_last_name: telegramUser?.last_name || null,
           items: cart,
           total: getTotalPrice(),
-          status: 'new'
+          status: settings?.payment_enabled ? 'pending_payment' : 'new'
         };
 
         try {
