@@ -423,14 +423,56 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Функция для автоматической установки webhook
+async function setupWebhookOnStartup() {
+  try {
+    // Получаем текущий URL где запущен сервер
+    const webhookUrl = `https://telegram-miniapp-fd6b.onrender.com/webhook`;
+    
+    // Проверяем текущий webhook
+    const checkResponse = await axios.get(
+      `https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`
+    );
+    
+    const currentWebhook = checkResponse.data.result.url;
+    
+    // Если webhook уже установлен правильно - ничего не делаем
+    if (currentWebhook === webhookUrl) {
+      console.log(`✅ Webhook уже установлен: ${webhookUrl}`);
+      return;
+    }
+    
+    // Устанавливаем webhook
+    console.log(`🔄 Установка webhook: ${webhookUrl}...`);
+    const setResponse = await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
+      { url: webhookUrl }
+    );
+    
+    if (setResponse.data.ok) {
+      console.log(`✅ Webhook успешно установлен!`);
+    } else {
+      console.error(`❌ Ошибка установки webhook:`, setResponse.data);
+    }
+  } catch (error) {
+    console.error(`❌ Ошибка при установке webhook:`, error.message);
+  }
+}
+
 // Запуск сервера
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`📱 Telegram Bot: ${BOT_TOKEN ? '✅ Настроен' : '❌ Не настроен'}`);
   console.log(`🗄️  Supabase: ${SUPABASE_URL ? '✅ Настроен' : '❌ Не настроен'}`);
   console.log(`\n🔗 Webhook endpoints:`);
   console.log(`   POST /webhook (рекомендуется)`);
   console.log(`   POST /bot${BOT_TOKEN}`);
-  console.log(`\n⚠️  Настройте webhook:`);
-  console.log(`   POST /api/setup-webhook\n`);
+  
+  // Автоматически устанавливаем webhook
+  if (BOT_TOKEN) {
+    console.log('');
+    await setupWebhookOnStartup();
+  }
+  
+  console.log('');
 });
