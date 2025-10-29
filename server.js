@@ -202,7 +202,19 @@ app.post('/api/notify-status', async (req, res) => {
 });
 
 // WEBHOOK для обработки сообщений от бота
+// Альтернативный путь (без токена в URL)
+app.post('/webhook', async (req, res) => {
+  console.log('📩 Получен webhook запрос на /webhook:', JSON.stringify(req.body, null, 2));
+  await handleWebhook(req, res);
+});
+
 app.post(`/bot${BOT_TOKEN}`, async (req, res) => {
+  console.log('📩 Получен webhook запрос на /bot${BOT_TOKEN}:', JSON.stringify(req.body, null, 2));
+  await handleWebhook(req, res);
+});
+
+// Общая функция обработки webhook
+async function handleWebhook(req, res) {
   try {
     const update = req.body;
 
@@ -361,7 +373,7 @@ app.post(`/bot${BOT_TOKEN}`, async (req, res) => {
     console.error('Ошибка обработки webhook:', error);
     res.json({ ok: true }); // Всё равно отвечаем ok, чтобы Telegram не спамил
   }
-});
+}
 
 // API: Настройка webhook
 app.post('/api/setup-webhook', async (req, res) => {
@@ -416,6 +428,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`📱 Telegram Bot: ${BOT_TOKEN ? '✅ Настроен' : '❌ Не настроен'}`);
   console.log(`🗄️  Supabase: ${SUPABASE_URL ? '✅ Настроен' : '❌ Не настроен'}`);
-  console.log(`\n⚠️  Не забудьте настроить webhook:`);
+  console.log(`\n🔗 Webhook endpoints:`);
+  console.log(`   POST /webhook (рекомендуется)`);
+  console.log(`   POST /bot${BOT_TOKEN}`);
+  console.log(`\n⚠️  Настройте webhook:`);
   console.log(`   POST /api/setup-webhook\n`);
 });
