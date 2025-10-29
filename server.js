@@ -498,7 +498,8 @@ async function handleWebhook(req, res) {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [[
-              { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${orderId}` }
+              { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${orderId}` },
+              { text: '❌ Отклонить оплату', callback_data: `reject_payment_${orderId}` }
             ]]
           }
         });
