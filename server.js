@@ -17,6 +17,10 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
+// URL Mini App
+const CLIENT_APP_URL = "https://telegram-miniapp-fd6b.onrender.com";
+const ADMIN_APP_URL = "https://telegram-miniapp-fd6b.onrender.com/admin.html";
+
 // Проверка конфигурации
 if (!BOT_TOKEN || !ADMIN_ID || !SUPABASE_URL || !SUPABASE_KEY) {
   console.error('⚠️  Заполните все переменные окружения в .env файле!');
@@ -217,6 +221,288 @@ app.post(`/bot${BOT_TOKEN}`, async (req, res) => {
 async function handleWebhook(req, res) {
   try {
     const update = req.body;
+
+    // Обработка текстовых команд и сообщений
+    if (update.message) {
+      const message = update.message;
+      const chatId = message.chat.id;
+      const text = message.text;
+      const userId = message.from.id;
+
+      // Команда /start
+      if (text === '/start') {
+        const firstName = message.from.first_name || 'друг';
+        const keyboard = {
+          keyboard: [
+            [{ text: '📦 Кондитерская', web_app: { url: CLIENT_APP_URL } }]
+          ],
+          resize_keyboard: true
+        };
+
+        // Если админ - добавляем админские кнопки
+        if (userId === ADMIN_ID) {
+          keyboard.keyboard.push([{ text: '⚙️ Админ-панель', web_app: { url: ADMIN_APP_URL } }]);
+          keyboard.keyboard.push([{ text: '📢 Рассылка' }]);
+        }
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `Привет, ${firstName}! 👋\n\nДобро пожаловать в нашу кондитерскую! 🎂\n\nНажми на кнопку ниже, чтобы посмотреть наши вкусности:`,
+          reply_markup: keyboard
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /help
+      if (text === '/help') {
+        let helpText = `🤖 <b>Команды бота:</b>\n\n/start - Главное меню\n/help - Помощь\n/contact - Контакты\n\n`;
+        
+        if (userId === ADMIN_ID) {
+          helpText += `<b>Команды администратора:</b>\n/broadcast [текст] - Рассылка всем клиентам\n/stats - Статистика заказов\n\n`;
+        }
+        
+        helpText += `Для заказа нажмите на кнопку '📦 Кондитерская'`;
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: helpText,
+          parse_mode: 'HTML'
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /contact
+      if (text === '/contact') {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `📞 <b>Наши контакты:</b>\n\nТелефон: +7 (777) 888-88-88\nEmail: info@bakery.kz\nАдрес: г. Астана, ул. Астана 8\n\nГрафик работы:\nПн-Вс: 09:00 - 21:00`,
+          parse_mode: 'HTML'
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /stats (только для админа)
+      if (text === '/stats' && userId === ADMIN_ID) {
+        try {
+          const { data: orders } = await supabase
+            .from('orders')
+            .select('*');
+
+          const total = orders.length;
+          const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+          const uniqueClients = new Set(orders.map(o => o.telegram_user_id).filter(Boolean)).size;
+          
+          const newOrders = orders.filter(o => o.status === 'new').length;
+          const processing = orders.filter(o => o.status === 'processing').length;
+          const completed = orders.filter(o => o.status === 'completed').length;
+          
+          const avgCheck = total > 0 ? Math.floor(revenue / total) : 0;
+
+          const statsText = `📊 <b>Статистика магазина</b>\n\n📦 Всего заказов: ${total}\n💰 Общая выручка: ${revenue.toLocaleString()} ₸\n👥 Уникальных клиентов: ${uniqueClients}\n\n<b>По статусам:</b>\n🆕 Новые: ${newOrders}\n⏳ В работе: ${processing}\n✅ Выполнено: ${completed}\n\n💵 Средний чек: ${avgCheck.toLocaleString()} ₸`;
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: statsText,
+            parse_mode: 'HTML'
+          });
+        } catch (error) {
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Ошибка получения статистики: ${error.message}`
+          });
+        }
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /broadcast (только для админа)
+      if (text.startsWith('/broadcast') && userId === ADMIN_ID) {
+        const broadcastText = text.replace('/broadcast', '').trim();
+        
+        if (!broadcastText) {
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `📢 <b>Как сделать рассылку:</b>\n\nИспользуйте команду:\n<code>/broadcast Ваше сообщение</code>\n\nПример:\n<code>/broadcast 🎉 Скидка 20% на все торты до конца недели!</code>\n\nИли просто нажмите кнопку '📢 Рассылка' и следуйте инструкциям.`,
+            parse_mode: 'HTML'
+          });
+          
+          return res.json({ ok: true });
+        }
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `📤 Начинаю рассылку...`
+        });
+
+        try {
+          const { data: orders } = await supabase
+            .from('orders')
+            .select('telegram_user_id');
+
+          if (!orders || orders.length === 0) {
+            await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+              chat_id: chatId,
+              text: `❌ Нет клиентов для рассылки`
+            });
+            return res.json({ ok: true });
+          }
+
+          const userIds = [...new Set(orders.map(o => o.telegram_user_id).filter(Boolean))];
+          let success = 0;
+          let failed = 0;
+
+          for (const targetId of userIds) {
+            try {
+              await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                chat_id: targetId,
+                text: broadcastText,
+                parse_mode: 'HTML'
+              });
+              success++;
+              await new Promise(resolve => setTimeout(resolve, 50));
+            } catch (err) {
+              failed++;
+            }
+          }
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ <b>Рассылка завершена!</b>\n\n👥 Всего клиентов: ${userIds.length}\n✅ Успешно отправлено: ${success}\n❌ Ошибок: ${failed}`,
+            parse_mode: 'HTML'
+          });
+        } catch (error) {
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Ошибка рассылки: ${error.message}`
+          });
+        }
+
+        return res.json({ ok: true });
+      }
+
+      // Кнопка "📢 Рассылка" (только для админа)
+      if (text === '📢 Рассылка' && userId === ADMIN_ID) {
+        pendingReceipts.set(`waiting_broadcast_${chatId}`, true);
+        
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `📝 <b>Создание рассылки</b>\n\nОтправьте текст для рассылки всем клиентам.\nПоддерживается форматирование HTML.\n\nЧтобы отменить - напишите /cancel`,
+          parse_mode: 'HTML'
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /cancel
+      if (text === '/cancel') {
+        pendingReceipts.delete(`waiting_broadcast_${chatId}`);
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `✅ Действие отменено`
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Если ждём текст для рассылки
+      if (pendingReceipts.has(`waiting_broadcast_${chatId}`) && userId === ADMIN_ID) {
+        pendingReceipts.delete(`waiting_broadcast_${chatId}`);
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `📤 Начинаю рассылку...`
+        });
+
+        try {
+          const { data: orders } = await supabase
+            .from('orders')
+            .select('telegram_user_id');
+
+          const userIds = [...new Set(orders.map(o => o.telegram_user_id).filter(Boolean))];
+          let success = 0;
+          let failed = 0;
+
+          for (const targetId of userIds) {
+            try {
+              await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                chat_id: targetId,
+                text: text,
+                parse_mode: 'HTML'
+              });
+              success++;
+              await new Promise(resolve => setTimeout(resolve, 50));
+            } catch (err) {
+              failed++;
+            }
+          }
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ <b>Рассылка завершена!</b>\n\n👥 Всего клиентов: ${userIds.length}\n✅ Успешно отправлено: ${success}\n❌ Ошибок: ${failed}`,
+            parse_mode: 'HTML'
+          });
+        } catch (error) {
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Ошибка рассылки: ${error.message}`
+          });
+        }
+
+        return res.json({ ok: true });
+      }
+
+      // Обычный ответ на текст
+      if (text && !text.startsWith('/')) {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `Я бот-помощник кондитерской! 🤖\nНажмите '📦 Кондитерская' чтобы сделать заказ.`
+        });
+        
+        return res.json({ ok: true });
+      }
+
+      // Обработка фото (чек от клиента)
+      if (message.photo && pendingReceipts.has(`waiting_${chatId}`)) {
+        const orderId = pendingReceipts.get(`waiting_${chatId}`);
+        pendingReceipts.delete(`waiting_${chatId}`);
+
+        const photo = message.photo[message.photo.length - 1];
+        const photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${(await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${photo.file_id}`)).data.result.file_path}`;
+
+        // Обновляем заказ
+        await supabase
+          .from('orders')
+          .update({ 
+            receipt_photo: photoUrl,
+            status: 'pending_payment'
+          })
+          .eq('id', orderId);
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `✅ <b>Чек получен!</b>\n\nМы проверим оплату и скоро свяжемся с вами.\n\n🇰🇿 <b>Чек алынды!</b>\n\nТөлемді тексереміз және жақында хабарласамыз.`,
+          parse_mode: 'HTML'
+        });
+
+        // Уведомляем админа
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+          chat_id: ADMIN_ID,
+          photo: photo.file_id,
+          caption: `📸 <b>Новый чек от клиента!</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nПроверьте оплату:`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${orderId}` }
+            ]]
+          }
+        });
+
+        return res.json({ ok: true });
+      }
+    }
 
     // Обработка callback кнопок (нажатие "Подтвердить оплату")
     if (update.callback_query) {
