@@ -13,7 +13,7 @@ app.use(express.static('public'));
 
 // Переменные окружения
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID;
+const ADMIN_ID = parseInt(process.env.ADMIN_ID); // Преобразуем в число!
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
