@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Переменные окружения (будут в .env на Glitch)
+// Переменные окружения
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -22,7 +22,14 @@ if (!BOT_TOKEN || !ADMIN_ID || !SUPABASE_URL || !SUPABASE_KEY) {
   console.error('⚠️  Заполните все переменные окружения в .env файле!');
 }
 
-// API: Отправка заказа в Telegram (безопасно на сервере)
+// Supabase клиент для сервера
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Хранилище для временных данных (orderId -> userId)
+const pendingReceipts = new Map();
+
+// API: Отправка заказа в Telegram
 app.post('/api/send-order', async (req, res) => {
   try {
     const { 
@@ -44,7 +51,7 @@ app.post('/api/send-order', async (req, res) => {
       return res.status(400).json({ error: 'Неверные данные заказа' });
     }
 
-    // Формируем красивое сообщение админу (как было раньше!)
+    // Формируем сообщение админу
     let message = "🆕 <b>НОВЫЙ ЗАКАЗ!</b>\n\n";
     message += `📋 Заказ #${orderId.slice(-6)}\n`;
     message += `📅 ${new Date(date).toLocaleString('ru-RU')}\n\n`;
@@ -63,14 +70,18 @@ app.post('/api/send-order', async (req, res) => {
     
     message += `\n<b>💰 Итого: ${total} ₸</b>`;
 
-    // Отправляем в Telegram админу
+    if (paymentEnabled) {
+      message += `\n\n⏰ <b>Статус:</b> Ожидает оплаты`;
+    }
+
+    // Отправляем админу
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       chat_id: ADMIN_ID,
       text: message,
       parse_mode: 'HTML'
     });
 
-    // Если включены платежи и есть telegram_user_id, отправляем реквизиты клиенту
+    // Если включены платежи, отправляем реквизиты клиенту
     if (paymentEnabled && telegramUserId) {
       let paymentMessage = "💳 <b>Реквизиты для оплаты / Төлем деректемелері</b>\n\n";
       paymentMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
@@ -80,26 +91,40 @@ app.post('/api/send-order', async (req, res) => {
         paymentMessage += `📱 <b>Kaspi номер:</b>\n+7${kaspiPhone}\n\n`;
       }
       
-      paymentMessage += "После оплаты, пожалуйста, отправьте скриншот чека владельцу магазина.\n";
-      paymentMessage += "Төлегеннен кейін чектің скриншотын дүкен иесіне жіберіңіз.\n\n";
+      paymentMessage += "После оплаты нажмите кнопку ниже и отправьте скриншот чека.\n";
+      paymentMessage += "Төлегеннен кейін төмендегі батырманы басып, чектің скриншотын жіберіңіз.\n\n";
       paymentMessage += "Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️";
 
-      const payload = {
-        chat_id: telegramUserId,
-        text: paymentMessage,
-        parse_mode: 'HTML'
+      const keyboard = {
+        inline_keyboard: []
       };
 
-      // Добавляем кнопку Kaspi если есть ссылка
+      // Кнопка Kaspi если есть ссылка
       if (kaspiLink) {
-        payload.reply_markup = {
-          inline_keyboard: [[
-            { text: "💳 Оплатить через Kaspi", url: kaspiLink }
-          ]]
-        };
+        keyboard.inline_keyboard.push([
+          { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+        ]);
       }
 
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, payload);
+      // ГЛАВНАЯ КНОПКА - отправить чек
+      keyboard.inline_keyboard.push([
+        { text: "📤 Подтвердить оплату", callback_data: `receipt_${orderId}` }
+      ]);
+
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: telegramUserId,
+        text: paymentMessage,
+        parse_mode: 'HTML',
+        reply_markup: keyboard
+      });
+
+      // Сохраняем связь orderId -> userId для обработки чека
+      pendingReceipts.set(orderId, {
+        userId: telegramUserId,
+        orderNumber: orderId.slice(-6),
+        total: total,
+        customerName: customerName
+      });
     }
 
     res.json({ success: true, message: 'Заказ успешно отправлен' });
@@ -113,7 +138,7 @@ app.post('/api/send-order', async (req, res) => {
   }
 });
 
-// API: Изменение статуса заказа (отправляет уведомление клиенту)
+// API: Изменение статуса заказа
 app.post('/api/notify-status', async (req, res) => {
   try {
     const { userId, status, orderNumber, shopPhone } = req.body;
@@ -150,6 +175,13 @@ app.post('/api/notify-status', async (req, res) => {
           message += `Сұрақтарыңыз болса, бізбен хабарласыңыз: ${shopPhone}`;
         }
         break;
+
+      case 'pending_payment':
+        message = `⏰ <b>Ожидаем оплату / Төлемді күтуде</b>\n\n`;
+        message += `📋 Заказ / Тапсырыс #${orderNumber}\n`;
+        message += `Пожалуйста, оплатите заказ и отправьте чек.\n`;
+        message += `Өтінеміз, тапсырысты төлеп, чекті жіберіңіз.`;
+        break;
         
       default:
         return res.status(400).json({ error: 'Неверный статус' });
@@ -169,11 +201,196 @@ app.post('/api/notify-status', async (req, res) => {
   }
 });
 
-// API: Получить публичный ключ Supabase (безопасно - это anon key)
+// WEBHOOK для обработки сообщений от бота
+app.post(`/bot${BOT_TOKEN}`, async (req, res) => {
+  try {
+    const update = req.body;
+
+    // Обработка callback кнопок (нажатие "Подтвердить оплату")
+    if (update.callback_query) {
+      const callbackQuery = update.callback_query;
+      const data = callbackQuery.data;
+      const chatId = callbackQuery.message.chat.id;
+      const messageId = callbackQuery.message.message_id;
+
+      // Нажата кнопка "Подтвердить оплату"
+      if (data.startsWith('receipt_')) {
+        const orderId = data.replace('receipt_', '');
+        
+        // Отвечаем на callback
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: '📸 Отлично! Теперь отправьте фото чека'
+        });
+
+        // Просим прислать фото
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: "📸 <b>Отправьте фото чека об оплате</b>\n\nПросто отправьте скриншот или фото чека следующим сообщением.\n\n🇰🇿 <b>Төлем чегінің фотосын жіберіңіз</b>",
+          parse_mode: 'HTML'
+        });
+
+        // Сохраняем, что ждём фото от этого пользователя
+        pendingReceipts.set(`waiting_${chatId}`, orderId);
+      }
+
+      // Админ подтверждает оплату
+      if (data.startsWith('confirm_payment_')) {
+        const orderId = data.replace('confirm_payment_', '');
+        
+        // Меняем статус в БД на processing
+        await supabase
+          .from('orders')
+          .update({ status: 'processing' })
+          .eq('id', orderId);
+
+        // Получаем данные заказа
+        const { data: order } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (order && order.telegram_user_id) {
+          // Уведомляем клиента
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: order.telegram_user_id,
+            text: `✅ <b>Оплата подтверждена!</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nМы приняли ваш заказ в работу! 👨‍🍳`,
+            parse_mode: 'HTML'
+          });
+        }
+
+        // Отвечаем админу
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: '✅ Оплата подтверждена!'
+        });
+
+        // Редактируем сообщение админу
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
+          chat_id: ADMIN_ID,
+          message_id: messageId,
+          caption: callbackQuery.message.caption + '\n\n✅ <b>ОПЛАТА ПОДТВЕРЖДЕНА</b>',
+          parse_mode: 'HTML'
+        });
+      }
+
+      // Админ отклоняет оплату
+      if (data.startsWith('reject_payment_')) {
+        const orderId = data.replace('reject_payment_', '');
+        
+        // Получаем данные заказа
+        const { data: order } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (order && order.telegram_user_id) {
+          // Уведомляем клиента
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: order.telegram_user_id,
+            text: `❌ <b>Чек не принят</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nПожалуйста, отправьте корректный чек или свяжитесь с нами.`,
+            parse_mode: 'HTML'
+          });
+        }
+
+        // Отвечаем админу
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: '❌ Чек отклонён'
+        });
+
+        // Редактируем сообщение
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
+          chat_id: ADMIN_ID,
+          message_id: messageId,
+          caption: callbackQuery.message.caption + '\n\n❌ <b>ЧЕК ОТКЛОНЁН</b>',
+          parse_mode: 'HTML'
+        });
+      }
+    }
+
+    // Обработка фото (чека)
+    if (update.message && update.message.photo) {
+      const chatId = update.message.chat.id;
+      const photo = update.message.photo[update.message.photo.length - 1]; // Берём самое большое фото
+      
+      // Проверяем, ждём ли мы фото от этого пользователя
+      const orderId = pendingReceipts.get(`waiting_${chatId}`);
+      
+      if (orderId) {
+        const orderInfo = pendingReceipts.get(orderId);
+        
+        if (orderInfo) {
+          // Отправляем чек админу
+          let caption = "📸 <b>ЧЕК ОБ ОПЛАТЕ</b>\n\n";
+          caption += `📋 Заказ #${orderInfo.orderNumber}\n`;
+          caption += `👤 ${orderInfo.customerName}\n`;
+          caption += `💰 ${orderInfo.total} ₸\n`;
+          caption += `ID: ${orderInfo.userId}`;
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            chat_id: ADMIN_ID,
+            photo: photo.file_id,
+            caption: caption,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "✅ Подтвердить", callback_data: `confirm_payment_${orderId}` },
+                { text: "❌ Отклонить", callback_data: `reject_payment_${orderId}` }
+              ]]
+            }
+          });
+
+          // Подтверждаем клиенту
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: "✅ <b>Чек получен!</b>\n\nМы проверим оплату и скоро свяжемся с вами.\n\n🇰🇿 <b>Чек алынды!</b>\nТөлемді тексеріп, жақында сізбен хабарласамыз.",
+            parse_mode: 'HTML'
+          });
+
+          // Удаляем из ожидания
+          pendingReceipts.delete(`waiting_${chatId}`);
+        }
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Ошибка обработки webhook:', error);
+    res.json({ ok: true }); // Всё равно отвечаем ok, чтобы Telegram не спамил
+  }
+});
+
+// API: Настройка webhook
+app.post('/api/setup-webhook', async (req, res) => {
+  try {
+    const webhookUrl = `${req.protocol}://${req.get('host')}/bot${BOT_TOKEN}`;
+    
+    const response = await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
+      { url: webhookUrl }
+    );
+
+    res.json({ 
+      success: true, 
+      webhookUrl,
+      telegram: response.data 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Ошибка настройки webhook',
+      details: error.message 
+    });
+  }
+});
+
+// API: Получить публичный ключ Supabase
 app.get('/api/config', (req, res) => {
   res.json({
     supabaseUrl: SUPABASE_URL,
-    supabaseKey: SUPABASE_KEY // Это публичный anon key, его можно передавать
+    supabaseKey: SUPABASE_KEY
   });
 });
 
@@ -199,4 +416,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`📱 Telegram Bot: ${BOT_TOKEN ? '✅ Настроен' : '❌ Не настроен'}`);
   console.log(`🗄️  Supabase: ${SUPABASE_URL ? '✅ Настроен' : '❌ Не настроен'}`);
+  console.log(`\n⚠️  Не забудьте настроить webhook:`);
+  console.log(`   POST /api/setup-webhook\n`);
 });
