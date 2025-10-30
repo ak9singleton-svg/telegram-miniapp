@@ -24,8 +24,8 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    const SUPABASE_URL = 'https://yepbabnubbjzvdjnlfzw.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllcGJhYm51YmJqenZkam5sZnp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzUyMjUsImV4cCI6MjA3NzI1MTIyNX0.0XGin1VyO8HmUZr2HuTGNKQqjJTKtFH6mHh75KGkvVs';
+    const SUPABASE_URL = 'https://gtinslbrwdpqkxeibuqs.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0aW5zbGJyd2RwcWt4ZWlidXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExMjM1MjMsImV4cCI6MjA3NjY5OTUyM30.3LbYP6AcsQ-qVZtdMgH6pJYX0rWLFGSUmT6errUwJOY';
     const API_URL = window.location.origin;
     const ADMIN_ID = 8086901919;
     
@@ -153,6 +153,8 @@
       const [telegramUser, setTelegramUser] = useState(null);
       const [settings, setSettings] = useState(null);
       const [lang, setLang] = useState('ru'); // Текущий язык
+      const [toast, setToast] = useState(null); // Для уведомлений
+      const [addedProductId, setAddedProductId] = useState(null); // Для анимации кнопки
       const [orderForm, setOrderForm] = useState({
         name: '',
         phone: '',
@@ -281,6 +283,25 @@
         } else {
           setCart([...cart, { ...product, quantity: 1 }]);
         }
+        
+        // Показываем toast уведомление
+        const productName = lang === 'ru' ? product.name : product.name_kk;
+        setToast({
+          message: lang === 'ru' ? `✅ ${productName} добавлен в корзину` : `✅ ${productName} себетке қосылды`,
+          type: 'success'
+        });
+        
+        // Анимация кнопки
+        setAddedProductId(product.id);
+        setTimeout(() => setAddedProductId(null), 1000);
+        
+        // Вибрация (если поддерживается)
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+        }
+        
+        // Убираем toast через 2 секунды
+        setTimeout(() => setToast(null), 2000);
       };
 
       const updateQuantity = (id, delta) => {
@@ -485,8 +506,8 @@
                       <button onClick={() => setView('cart')} className="relative p-2 bg-pink-500 text-white rounded-full">
                         <ShoppingCartIcon />
                         {cart.length > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                            {cart.length}
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-pulse">
+                            {cart.reduce((sum, item) => sum + item.quantity, 0)}
                           </span>
                         )}
                       </button>
@@ -518,8 +539,23 @@
                       <p className="text-gray-600 text-sm mt-1">{getProductDescription(product)}</p>
                       <div className="flex items-center justify-between mt-3">
                         <span className="text-xl font-bold text-pink-500">{product.price} ₸</span>
-                        <button onClick={() => addToCart(product)} className="bg-pink-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                          <PlusIcon /> {t.addToCart}
+                        <button 
+                          onClick={() => addToCart(product)} 
+                          className={`${
+                            addedProductId === product.id 
+                              ? 'bg-green-500 scale-110' 
+                              : 'bg-pink-500'
+                          } text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-300 transform hover:scale-105`}
+                        >
+                          {addedProductId === product.id ? (
+                            <>
+                              <span className="text-lg">✓</span> {lang === 'ru' ? 'Добавлено!' : 'Қосылды!'}
+                            </>
+                          ) : (
+                            <>
+                              <PlusIcon /> {t.addToCart}
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -690,6 +726,16 @@
                 <button onClick={submitOrder} className="w-full bg-pink-500 text-white py-3 rounded-lg font-bold">
                   {t.submitOrder}
                 </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Toast уведомление */}
+          {toast && (
+            <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+              <div className={`${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2`}>
+                <span className="text-xl">{toast.type === 'success' ? '✅' : '❌'}</span>
+                <span className="font-medium">{toast.message}</span>
               </div>
             </div>
           )}
