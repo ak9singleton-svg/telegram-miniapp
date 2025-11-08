@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
 
 // Переменные окружения
@@ -18,8 +19,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 // URL Mini App
-const CLIENT_APP_URL = "https://telegram-miniapp-fd6b.onrender.com";
-const ADMIN_APP_URL = "https://telegram-miniapp-fd6b.onrender.com/admin.html";
+const BASE_URL = "https://mini-app-tel.onrender.com";
+const CLIENT_APP_URL = BASE_URL;
+const ADMIN_APP_URL = `${BASE_URL}/admin.html`;
 
 // Проверка конфигурации
 if (!BOT_TOKEN || !ADMIN_ID || !SUPABASE_URL || !SUPABASE_KEY) {
@@ -33,23 +35,122 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // Хранилище для временных данных (orderId -> userId)
 const pendingReceipts = new Map();
 
+// API: Создание заказа (новый endpoint)
+app.post('/api/create-order', async (req, res) => {
+  try {
+    const { 
+      customer_name, 
+      customer_phone, 
+      customer_comment,
+      telegram_user_id, 
+      telegram_username, 
+      telegram_first_name,
+      telegram_last_name,
+      items, 
+      total,
+      status
+    } = req.body;
+    
+    // Генерируем ID
+    const orderId = Date.now().toString();
+    
+    // Обрабатываем items с фото (если есть blob: URL, просто удаляем их)
+    let processedItems = items;
+    if (items && Array.isArray(items)) {
+      processedItems = items.map(item => {
+        const newItem = { ...item };
+        
+        // Удаляем blob: URL если есть
+        if (newItem.customCake?.referencePhoto && typeof newItem.customCake.referencePhoto === 'string' && newItem.customCake.referencePhoto.startsWith('blob:')) {
+          delete newItem.customCake.referencePhoto;
+        }
+        
+        if (newItem.customDetails?.customDecorImage && typeof newItem.customDetails.customDecorImage === 'string' && newItem.customDetails.customDecorImage.startsWith('blob:')) {
+          delete newItem.customDetails.customDecorImage;
+        }
+        
+        return newItem;
+      });
+    }
+    
+    // Создаем объект заказа только с полями которые есть в таблице
+    const order = {
+      id: orderId,
+      customer_name,
+      customer_phone,
+      customer_comment,
+      telegram_user_id,
+      telegram_username,
+      telegram_first_name,
+      telegram_last_name,
+      items: processedItems,
+      total,
+      status
+    };
+    
+    // Сохраняем заказ в БД
+    const { error } = await supabase
+      .from('orders')
+      .insert([order]);
+    
+    if (error) {
+      console.error('Ошибка сохранения заказа:', error);
+      return res.status(500).json({ error: 'Ошибка сохранения заказа', details: error.message });
+    }
+    
+    // Отправляем уведомление админу
+    try {
+      // Получаем настройки для передачи в send-order
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      await axios.post(`${process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000'}/api/send-order`, {
+        orderId: order.id,
+        customerName: order.customer_name,
+        customerPhone: order.customer_phone,
+        customerComment: order.customer_comment,
+        telegramUserId: order.telegram_user_id,
+        telegramUsername: order.telegram_username,
+        items: order.items,
+        total: order.total,
+        paymentEnabled: settings?.payment_enabled || false,
+        kaspiPhone: settings?.kaspi_phone || '',
+        kaspiLink: settings?.kaspi_link || ''
+      });
+    } catch (notifError) {
+      console.error('Ошибка отправки уведомления:', notifError);
+      // Не возвращаем ошибку - заказ уже создан
+    }
+    
+    res.json({ success: true, orderId: order.id });
+    
+  } catch (error) {
+    console.error('Ошибка создания заказа:', error);
+    res.status(500).json({ error: 'Ошибка создания заказа', details: error.message });
+  }
+});
+
 // API: Отправка заказа в Telegram
 app.post('/api/send-order', async (req, res) => {
   try {
     const { 
       orderId, 
-      date, 
       customerName, 
       customerPhone, 
       customerComment,
       telegramUserId, 
       telegramUsername, 
-      items, 
       total,
       paymentEnabled,
       kaspiPhone,
       kaspiLink
     } = req.body;
+    
+    // items объявляем как let, чтобы можно было переназначить после загрузки в Storage
+    let items = req.body.items;
 
     if (!orderId || !items || !total) {
       return res.status(400).json({ error: 'Неверные данные заказа' });
@@ -58,7 +159,7 @@ app.post('/api/send-order', async (req, res) => {
     // Формируем сообщение админу
     let message = "🆕 <b>НОВЫЙ ЗАКАЗ!</b>\n\n";
     message += `📋 Заказ #${orderId.slice(-6)}\n`;
-    message += `📅 ${new Date(date).toLocaleString('ru-RU')}\n\n`;
+    message += `📅 ${new Date().toLocaleString('ru-RU')}\n\n`;
     
     message += "<b>👤 Клиент:</b>\n";
     message += `Имя: ${customerName}\n`;
@@ -70,6 +171,20 @@ app.post('/api/send-order', async (req, res) => {
     message += "\n<b>🛒 Товары:</b>\n";
     items.forEach(item => {
       message += `• ${item.name} x${item.quantity} = ${item.price * item.quantity} ₸\n`;
+      
+      // Если это кастомный торт - добавляем детали
+      if (item.customDetails) {
+        message += `  <i>Детали:</i>\n`;
+        message += `  - Размер: ${item.customDetails.sizeName}\n`;
+        message += `  - Начинка: ${item.customDetails.fillingName}\n`;
+        message += `  - Декор: ${item.customDetails.decorName}\n`;
+        if (item.customDetails.customDecorComment) {
+          message += `  - Описание: ${item.customDetails.customDecorComment}\n`;
+        }
+        if (item.customDetails.customDecorImage) {
+          message += `  - 📸 Фото референса прикреплено\n`;
+        }
+      }
     });
     
     message += `\n<b>💰 Итого: ${total} ₸</b>`;
@@ -85,50 +200,162 @@ app.post('/api/send-order', async (req, res) => {
       parse_mode: 'HTML'
     });
 
-    // Если включены платежи, отправляем реквизиты клиенту
+    // Функция загрузки фото в Storage и замены base64 на URL
+    const uploadPhotoToStorage = async (item, orderId) => {
+      if (!item.customDetails?.customDecorImage) return item;
+      
+      try {
+        // Если это уже URL (начинается с http) - не трогаем
+        if (item.customDetails.customDecorImage.startsWith('http')) {
+          return item;
+        }
+
+        // Извлекаем base64 данные
+        const base64Data = item.customDetails.customDecorImage.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Генерируем уникальное имя файла
+        const fileName = `${orderId}-${Date.now()}.jpg`;
+        
+        // Загружаем в Supabase Storage
+        const { data, error } = await supabase.storage
+          .from('cake-references')
+          .upload(fileName, buffer, {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error('Ошибка загрузки в Storage:', error);
+          return item; // Возвращаем оригинал если ошибка
+        }
+
+        // Получаем публичный URL
+        const { data: urlData } = supabase.storage
+          .from('cake-references')
+          .getPublicUrl(fileName);
+
+        // Заменяем base64 на URL
+        return {
+          ...item,
+          customDetails: {
+            ...item.customDetails,
+            customDecorImage: urlData.publicUrl
+          }
+        };
+      } catch (error) {
+        console.error('Ошибка обработки фото:', error);
+        return item; // Возвращаем оригинал если ошибка
+      }
+    };
+
+    // Загружаем фото в Storage и заменяем base64 на URLs
+    const itemsWithUrls = await Promise.all(
+      items.map(item => uploadPhotoToStorage(item, orderId))
+    );
+
+    // Обновляем items с URLs вместо base64
+    items = itemsWithUrls;
+
+    // Отправляем фото референсов если есть
+    for (const item of items) {
+      if (item.customDetails?.customDecorImage && item.customDetails.customDecorImage.startsWith('http')) {
+        try {
+          // Скачиваем фото по URL для отправки в Telegram
+          const response = await axios.get(item.customDetails.customDecorImage, {
+            responseType: 'arraybuffer'
+          });
+          const buffer = Buffer.from(response.data);
+          
+          // Отправляем фото
+          const FormData = require('form-data');
+          const form = new FormData();
+          form.append('chat_id', ADMIN_ID);
+          form.append('photo', buffer, { filename: 'reference.jpg', contentType: 'image/jpeg' });
+          form.append('caption', `📸 <b>Референс для заказа #${orderId.slice(-6)}</b>\n\n${item.name}`, { contentType: 'text/plain' });
+          form.append('parse_mode', 'HTML');
+          
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, form, {
+            headers: form.getHeaders()
+          });
+        } catch (error) {
+          console.error('Ошибка отправки фото референса:', error);
+        }
+      }
+    }
+
+    // Проверяем есть ли кастомный торт в заказе
+    const hasCustomCake = items.some(item => 
+      item.customDetails || 
+      item.customCake ||
+      item.name.includes('Торт на заказ') ||
+      item.name.includes('тапсырысқа торт')
+    );
+
+    // Если включены платежи, отправляем сообщение клиенту
     if (paymentEnabled && telegramUserId) {
-      let paymentMessage = "💳 <b>Реквизиты для оплаты / Төлем деректемелері</b>\n\n";
-      paymentMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
-      paymentMessage += `💰 Сумма / Сомасы: <b>${total} ₸</b>\n\n`;
       
-      if (kaspiPhone) {
-        paymentMessage += `📱 <b>Kaspi номер:</b>\n+7${kaspiPhone}\n\n`;
-      }
-      
-      paymentMessage += "После оплаты нажмите кнопку ниже и отправьте скриншот чека.\n";
-      paymentMessage += "Төлегеннен кейін төмендегі батырманы басып, чектің скриншотын жіберіңіз.\n\n";
-      paymentMessage += "Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️";
+      // Для кастомных тортов - отправляем сообщение о согласовании
+      if (hasCustomCake) {
+        let customMessage = "🎂 <b>Спасибо за заказ!</b>\n\n";
+        customMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
+        customMessage += `💰 Предварительная сумма: <b>${total} ₸</b>\n\n`;
+        customMessage += "⏳ <b>Ваш заказ на согласовании</b>\n\n";
+        customMessage += "Мы проверяем детали вашего кастомного торта и свяжемся с вами в ближайшее время для подтверждения цены и деталей.\n\n";
+        customMessage += "🇰🇿 <b>Тапсырысыңыз келісімде</b>\n\n";
+        customMessage += "Біз сіздің торттың деталдарын тексеріп жатырмыз және бағаны және деталдарды растау үшін жақын арада сізбен байланысамыз.";
 
-      const keyboard = {
-        inline_keyboard: []
-      };
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: telegramUserId,
+          text: customMessage,
+          parse_mode: 'HTML'
+        });
+      } else {
+        // Для обычных заказов - отправляем реквизиты с кнопкой оплаты
+        let paymentMessage = "💳 <b>Реквизиты для оплаты / Төлем деректемелері</b>\n\n";
+        paymentMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
+        paymentMessage += `💰 Сумма / Сомасы: <b>${total} ₸</b>\n\n`;
+        
+        if (kaspiPhone) {
+          paymentMessage += `📱 <b>Kaspi номер:</b>\n+7${kaspiPhone}\n\n`;
+        }
+        
+        paymentMessage += "После оплаты нажмите кнопку ниже и отправьте скриншот чека.\n";
+        paymentMessage += "Төлегеннен кейін төмендегі батырманы басып, чектің скриншотын жіберіңіз.\n\n";
+        paymentMessage += "Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️";
 
-      // Кнопка Kaspi если есть ссылка
-      if (kaspiLink) {
+        const keyboard = {
+          inline_keyboard: []
+        };
+
+        // Кнопка Kaspi если есть ссылка
+        if (kaspiLink) {
+          keyboard.inline_keyboard.push([
+            { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+          ]);
+        }
+
+        // ГЛАВНАЯ КНОПКА - отправить чек
         keyboard.inline_keyboard.push([
-          { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+          { text: "📤 Подтвердить оплату", callback_data: `receipt_${orderId}` }
         ]);
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: telegramUserId,
+          text: paymentMessage,
+          parse_mode: 'HTML',
+          reply_markup: keyboard
+        });
+
+        // Сохраняем связь orderId -> userId для обработки чека
+        pendingReceipts.set(orderId, {
+          userId: telegramUserId,
+          orderNumber: orderId.slice(-6),
+          total: total,
+          customerName: customerName
+        });
       }
-
-      // ГЛАВНАЯ КНОПКА - отправить чек
-      keyboard.inline_keyboard.push([
-        { text: "📤 Подтвердить оплату", callback_data: `receipt_${orderId}` }
-      ]);
-
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        chat_id: telegramUserId,
-        text: paymentMessage,
-        parse_mode: 'HTML',
-        reply_markup: keyboard
-      });
-
-      // Сохраняем связь orderId -> userId для обработки чека
-      pendingReceipts.set(orderId, {
-        userId: telegramUserId,
-        orderNumber: orderId.slice(-6),
-        total: total,
-        customerName: customerName
-      });
     }
 
     res.json({ success: true, message: 'Заказ успешно отправлен' });
@@ -261,7 +488,7 @@ async function handleWebhook(req, res) {
         let helpText = `🤖 <b>Команды бота:</b>\n\n/start - Главное меню\n/help - Помощь\n/contact - Контакты\n\n`;
         
         if (userId === ADMIN_ID) {
-          helpText += `<b>Команды администратора:</b>\n/broadcast [текст] - Рассылка всем клиентам\n/stats - Статистика заказов\n\n`;
+          helpText += `<b>Команды администратора:</b>\n/admin - Открыть админ-панель\n/broadcast [текст] - Рассылка всем клиентам\n/stats - Статистика заказов\n/detailed_stats - Подробная статистика\n\n`;
         }
         
         helpText += `Для заказа нажмите на кнопку '📦 Кондитерская'`;
@@ -286,6 +513,24 @@ async function handleWebhook(req, res) {
         return res.json({ ok: true });
       }
 
+      // Команда /admin (только для админа)
+      if (text === '/admin' && userId === ADMIN_ID) {
+        const keyboard = {
+          inline_keyboard: [[
+            { text: '⚙️ Открыть админ-панель', web_app: { url: ADMIN_APP_URL } }
+          ]]
+        };
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `🔧 <b>Админ-панель</b>\n\nУправление товарами, заказами, настройками магазина и рассылкой.`,
+          parse_mode: 'HTML',
+          reply_markup: keyboard
+        });
+        
+        return res.json({ ok: true });
+      }
+
       // Команда /stats (только для админа)
       if (text === '/stats' && userId === ADMIN_ID) {
         try {
@@ -303,7 +548,7 @@ async function handleWebhook(req, res) {
           
           const avgCheck = total > 0 ? Math.floor(revenue / total) : 0;
 
-          const statsText = `📊 <b>Статистика магазина</b>\n\n📦 Всего заказов: ${total}\n💰 Общая выручка: ${revenue.toLocaleString()} ₸\n👥 Уникальных клиентов: ${uniqueClients}\n\n<b>По статусам:</b>\n🆕 Новые: ${newOrders}\n⏳ В работе: ${processing}\n✅ Выполнено: ${completed}\n\n💵 Средний чек: ${avgCheck.toLocaleString()} ₸`;
+          const statsText = `📊 <b>Статистика магазина</b>\n\n📦 Всего заказов: ${total}\n💰 Общая выручка: ${revenue.toLocaleString()} ₸\n👥 Уникальных клиентов: ${uniqueClients}\n\n<b>По статусам:</b>\n🆕 Новые: ${newOrders}\n⏳ В работе: ${processing}\n✅ Выполнено: ${completed}\n\n💵 Средний чек: ${avgCheck.toLocaleString()} ₸\n\n<i>Для подробной статистики: /detailed_stats</i>`;
 
           await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             chat_id: chatId,
@@ -311,6 +556,132 @@ async function handleWebhook(req, res) {
             parse_mode: 'HTML'
           });
         } catch (error) {
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Ошибка получения статистики: ${error.message}`
+          });
+        }
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /detailed_stats (только для админа) - ПОДРОБНАЯ СТАТИСТИКА
+      if (text === '/detailed_stats' && userId === ADMIN_ID) {
+        try {
+          const { data: orders } = await supabase
+            .from('orders')
+            .select('*');
+
+          const { data: products } = await supabase
+            .from('products')
+            .select('*');
+
+          // === БАЗОВЫЕ МЕТРИКИ ===
+          const total = orders.length;
+          const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+          const completedOrders = orders.filter(o => o.status === 'completed');
+          const completedRevenue = completedOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+          
+          // === СТАТИСТИКА ПО ПЕРИОДАМ ===
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          
+          const ordersToday = orders.filter(o => new Date(o.created_at) >= today).length;
+          const ordersWeek = orders.filter(o => new Date(o.created_at) >= weekAgo).length;
+          const ordersMonth = orders.filter(o => new Date(o.created_at) >= monthAgo).length;
+          
+          const revenueToday = orders.filter(o => new Date(o.created_at) >= today).reduce((sum, o) => sum + (o.total || 0), 0);
+          const revenueWeek = orders.filter(o => new Date(o.created_at) >= weekAgo).reduce((sum, o) => sum + (o.total || 0), 0);
+          const revenueMonth = orders.filter(o => new Date(o.created_at) >= monthAgo).reduce((sum, o) => sum + (o.total || 0), 0);
+          
+          // === ПОПУЛЯРНЫЕ ТОВАРЫ ===
+          const productSales = {};
+          orders.forEach(order => {
+            if (order.items && Array.isArray(order.items)) {
+              order.items.forEach(item => {
+                const name = item.name || item.customCake?.description || 'Кастомный торт';
+                if (!productSales[name]) {
+                  productSales[name] = { count: 0, revenue: 0 };
+                }
+                productSales[name].count += item.quantity || 1;
+                productSales[name].revenue += (item.price || 0) * (item.quantity || 1);
+              });
+            }
+          });
+          
+          const topProducts = Object.entries(productSales)
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 5);
+          
+          const topProductsText = topProducts.map((item, idx) => 
+            `${idx + 1}. ${item[0]} - ${item[1].count} шт. (${item[1].revenue.toLocaleString()}₸)`
+          ).join('\n') || 'Нет данных';
+          
+          // === КОНВЕРСИЯ ===
+          const pendingPayment = orders.filter(o => o.status === 'pending_payment').length;
+          const cancelled = orders.filter(o => o.status === 'cancelled').length;
+          const conversionRate = total > 0 ? Math.round((completedOrders.length / total) * 100) : 0;
+          
+          // === КЛИЕНТЫ ===
+          const uniqueClients = new Set(orders.map(o => o.telegram_user_id).filter(Boolean)).size;
+          const repeatClients = orders.reduce((acc, order) => {
+            const userId = order.telegram_user_id;
+            if (userId) {
+              acc[userId] = (acc[userId] || 0) + 1;
+            }
+            return acc;
+          }, {});
+          const repeatClientsCount = Object.values(repeatClients).filter(count => count > 1).length;
+          const repeatRate = uniqueClients > 0 ? Math.round((repeatClientsCount / uniqueClients) * 100) : 0;
+          
+          // === СРЕДНЕЕ ВРЕМЯ ОБРАБОТКИ ===
+          const completedWithTime = completedOrders.filter(o => o.created_at && o.updated_at);
+          let avgProcessingTime = 0;
+          if (completedWithTime.length > 0) {
+            const totalTime = completedWithTime.reduce((sum, o) => {
+              const created = new Date(o.created_at);
+              const updated = new Date(o.updated_at);
+              return sum + (updated - created);
+            }, 0);
+            avgProcessingTime = Math.round((totalTime / completedWithTime.length) / (1000 * 60 * 60)); // в часах
+          }
+
+          const detailedStatsText = `📊 <b>ДЕТАЛЬНАЯ СТАТИСТИКА</b>\n\n` +
+            `📈 <b>ВЫРУЧКА:</b>\n` +
+            `💰 Всего: ${revenue.toLocaleString()} ₸\n` +
+            `✅ Завершено: ${completedRevenue.toLocaleString()} ₸\n` +
+            `📅 Сегодня: ${revenueToday.toLocaleString()} ₸\n` +
+            `📅 За неделю: ${revenueWeek.toLocaleString()} ₸\n` +
+            `📅 За месяц: ${revenueMonth.toLocaleString()} ₸\n\n` +
+            `📦 <b>ЗАКАЗЫ:</b>\n` +
+            `📊 Всего: ${total}\n` +
+            `📅 Сегодня: ${ordersToday}\n` +
+            `📅 За неделю: ${ordersWeek}\n` +
+            `📅 За месяц: ${ordersMonth}\n` +
+            `💵 Средний чек: ${Math.round(revenue / total || 0).toLocaleString()} ₸\n\n` +
+            `🎯 <b>КОНВЕРСИЯ:</b>\n` +
+            `✅ Выполнено: ${completedOrders.length} (${conversionRate}%)\n` +
+            `⏳ Ожидают оплаты: ${pendingPayment}\n` +
+            `❌ Отменено: ${cancelled}\n` +
+            `⏱️ Среднее время обработки: ${avgProcessingTime}ч\n\n` +
+            `👥 <b>КЛИЕНТЫ:</b>\n` +
+            `👤 Уникальных: ${uniqueClients}\n` +
+            `🔄 Повторных: ${repeatClientsCount} (${repeatRate}%)\n` +
+            `📊 Заказов на клиента: ${(total / uniqueClients || 0).toFixed(1)}\n\n` +
+            `🏆 <b>ТОП-5 ТОВАРОВ:</b>\n${topProductsText}\n\n` +
+            `📦 <b>ТОВАРЫ В КАТАЛОГЕ:</b>\n` +
+            `Всего: ${products?.length || 0}\n` +
+            `Доступно: ${products?.filter(p => p.available).length || 0}`;
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: detailedStatsText,
+            parse_mode: 'HTML'
+          });
+        } catch (error) {
+          console.error('Ошибка получения детальной статистики:', error);
           await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             chat_id: chatId,
             text: `❌ Ошибка получения статистики: ${error.message}`
@@ -468,43 +839,122 @@ async function handleWebhook(req, res) {
       } // Конец блока if (text)
 
       // Обработка фото (чек от клиента)
-      if (message.photo && pendingReceipts.has(`waiting_${chatId}`)) {
-        const orderId = pendingReceipts.get(`waiting_${chatId}`);
-        pendingReceipts.delete(`waiting_${chatId}`);
-
+      if (message.photo) {
         const photo = message.photo[message.photo.length - 1];
-        const photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${(await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${photo.file_id}`)).data.result.file_path}`;
+        
+        // Проверяем - есть ли флаг ожидания чека
+        if (pendingReceipts.has(`waiting_${chatId}`)) {
+          const orderId = pendingReceipts.get(`waiting_${chatId}`);
+          pendingReceipts.delete(`waiting_${chatId}`);
 
-        // Обновляем заказ
-        await supabase
-          .from('orders')
-          .update({ 
-            receipt_photo: photoUrl,
-            status: 'pending_payment'
-          })
-          .eq('id', orderId);
+          const photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${(await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${photo.file_id}`)).data.result.file_path}`;
 
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          chat_id: chatId,
-          text: `✅ <b>Чек получен!</b>\n\nМы проверим оплату и скоро свяжемся с вами.\n\n🇰🇿 <b>Чек алынды!</b>\n\nТөлемді тексереміз және жақында хабарласамыз.`,
-          parse_mode: 'HTML'
-        });
+          // Обновляем заказ
+          await supabase
+            .from('orders')
+            .update({ 
+              receipt_photo: photoUrl,
+              status: 'pending_payment'
+            })
+            .eq('id', orderId);
 
-        // Уведомляем админа
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-          chat_id: ADMIN_ID,
-          photo: photo.file_id,
-          caption: `📸 <b>Новый чек от клиента!</b>\n\n📋 Заказ #${orderId.slice(-6)}\n\nПроверьте оплату:`,
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${orderId}` },
-              { text: '❌ Отклонить оплату', callback_data: `reject_payment_${orderId}` }
-            ]]
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ <b>Чек получен!</b>\n\nМы проверим оплату и скоро свяжемся с вами.\n\n🇰🇿 <b>Чек алынды!</b>\n\nТөлемді тексереміз және жақында хабарласамыз.`,
+            parse_mode: 'HTML'
+          });
+
+          // Получаем полную информацию о заказе для caption
+          const { data: orderData } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+          
+          // Формируем детальное описание товаров
+          let itemsList = '';
+          if (orderData && orderData.items) {
+            itemsList = orderData.items.map((item, idx) => 
+              `${idx + 1}. ${item.name || item.customCake?.description || 'Товар'} x${item.quantity} - ${item.price * item.quantity}₸`
+            ).join('\n');
           }
-        });
 
-        return res.json({ ok: true });
+          // Уведомляем админа с ПОЛНОЙ информацией
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            chat_id: ADMIN_ID,
+            photo: photo.file_id,
+            caption: `📸 <b>ЧЕК ОПЛАТЫ</b>\n\n📋 Заказ #${orderId.slice(-6)}\n👤 ${orderData?.customer_name || 'Неизвестно'}\n📞 ${orderData?.customer_phone || '-'}\n💰 Сумма: ${orderData?.total || 0} ₸\n\n<b>Товары:</b>\n${itemsList || 'Не указано'}\n\n<b>Проверьте оплату:</b>`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${orderId}` },
+                { text: '❌ Отклонить оплату', callback_data: `reject_payment_${orderId}` }
+              ]]
+            }
+          });
+
+          return res.json({ ok: true });
+        }
+        
+        // Если флага нет - ищем последний заказ этого пользователя
+        const { data: orders } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('telegram_user_id', userId)
+          .in('status', ['new', 'pending_payment'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (orders && orders.length > 0) {
+          const order = orders[0];
+          
+          // Сохраняем чек
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'pending_payment'
+            })
+            .eq('id', order.id);
+          
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ <b>Чек получен!</b>\n\nМы проверим оплату и скоро свяжемся с вами.\n\n🇰🇿 <b>Чек алынды!</b>\n\nТөлемді тексереміз және жақында хабарласамыз.`,
+            parse_mode: 'HTML'
+          });
+
+          // Формируем детальное описание товаров
+          let itemsList = '';
+          if (order.items && Array.isArray(order.items)) {
+            itemsList = order.items.map((item, idx) => 
+              `${idx + 1}. ${item.name || item.customCake?.description || 'Товар'} x${item.quantity} - ${item.price * item.quantity}₸`
+            ).join('\n');
+          }
+
+          // Уведомляем админа с ПОЛНОЙ информацией
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            chat_id: ADMIN_ID,
+            photo: photo.file_id,
+            caption: `📸 <b>ЧЕК ОПЛАТЫ</b>\n\n📋 Заказ #${order.id.slice(-6)}\n👤 ${order.customer_name || 'Неизвестно'}\n📞 ${order.customer_phone || '-'}\n💰 Сумма: ${order.total || 0} ₸\n\n<b>Товары:</b>\n${itemsList || 'Не указано'}\n\n<b>Проверьте оплату:</b>`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '✅ Подтвердить оплату', callback_data: `confirm_payment_${order.id}` },
+                { text: '❌ Отклонить оплату', callback_data: `reject_payment_${order.id}` }
+              ]]
+            }
+          });
+          
+          return res.json({ ok: true });
+        } else {
+          // Нет заказа для оплаты
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Не найден заказ ожидающий оплаты.\n\nСначала оформите заказ через кнопку '📦 Кондитерская'\n\n🇰🇿 Төлем күтіп тұрған тапсырыс табылмады.`,
+            parse_mode: 'HTML'
+          });
+          
+          return res.json({ ok: true });
+        }
       }
     }
 
@@ -619,6 +1069,78 @@ async function handleWebhook(req, res) {
           parse_mode: 'HTML'
         });
       }
+
+      // Клиент принимает предложение
+      if (data.startsWith('accept_proposal_')) {
+        const orderId = data.replace('accept_proposal_', '');
+        
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: callbackQuery.id,
+          text: '✅ Отлично!'
+        });
+
+        const { data: order } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (order) {
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'processing',
+              negotiation_status: 'accepted',
+              total: order.proposed_price || order.total
+            })
+            .eq('id', orderId);
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ <b>Спасибо!</b>\n\nВаш заказ принят в работу!\n💰 Итоговая цена: ${order.proposed_price || order.total}₸`,
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '💳 Подтвердить оплату', callback_data: `receipt_${orderId}` }
+              ]]
+            }
+          });
+
+          // Уведомляем админа
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: ADMIN_ID,
+            text: `✅ <b>Клиент принял предложение!</b>\n\n📋 Заказ #${orderId.slice(-6)}\n💰 Цена: ${order.proposed_price || order.total}₸`,
+            parse_mode: 'HTML'
+          });
+        }
+
+        return res.json({ ok: true });
+      }
+
+      // Клиент отменяет заказ
+      if (data.startsWith('cancel_order_')) {
+        const orderId = data.replace('cancel_order_', '');
+        
+        await supabase
+          .from('orders')
+          .update({ status: 'cancelled', negotiation_status: 'rejected' })
+          .eq('id', orderId);
+
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: chatId,
+          text: `❌ <b>Заказ отменён</b>\n\nБудем рады видеть вас снова! 🎂`,
+          parse_mode: 'HTML'
+        });
+
+        // Уведомляем админа
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          chat_id: ADMIN_ID,
+          text: `❌ Клиент отменил заказ #${orderId.slice(-6)}`,
+          parse_mode: 'HTML'
+        });
+
+        return res.json({ ok: true });
+      }
     }
 
     // Обработка фото (чека)
@@ -725,7 +1247,7 @@ app.get('/health', (req, res) => {
 async function setupWebhookOnStartup() {
   try {
     // Получаем текущий URL где запущен сервер
-    const webhookUrl = `https://telegram-miniapp-fd6b.onrender.com/webhook`;
+    const webhookUrl = `https://mini-app-tel.onrender.com/webhook`;
     
     // Проверяем текущий webhook
     const checkResponse = await axios.get(
@@ -756,6 +1278,128 @@ async function setupWebhookOnStartup() {
     console.error(`❌ Ошибка при установке webhook:`, error.message);
   }
 }
+
+// ========== API ЭНДПОИНТЫ ДЛЯ СИСТЕМЫ СОГЛАСОВАНИЯ ==========
+
+// API: Подтвердить заказ как есть
+app.post('/api/confirm-order', async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    const { data: order } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (!order || !order.telegram_user_id) {
+      return res.status(404).json({ error: 'Заказ не найден' });
+    }
+
+    // Получаем настройки для реквизитов
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('*')
+      .single();
+
+    const kaspiPhone = settings?.kaspi_phone || '';
+    const kaspiLink = settings?.kaspi_link || '';
+
+    let confirmMessage = "✅ <b>Отлично! Ваш заказ подтверждён!</b>\n\n";
+    confirmMessage += "🎂 Кастомный торт\n";
+    confirmMessage += `💰 Стоимость: ${order.total}₸\n\n`;
+    
+    if (kaspiPhone) {
+      confirmMessage += `📱 <b>Kaspi номер для оплаты:</b>\n+7${kaspiPhone}\n\n`;
+    }
+    
+    confirmMessage += "После оплаты нажмите кнопку ниже и отправьте скриншот чека.\n\n";
+    confirmMessage += "Спасибо! ❤️";
+
+    const keyboard = {
+      inline_keyboard: []
+    };
+
+    if (kaspiLink) {
+      keyboard.inline_keyboard.push([
+        { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+      ]);
+    }
+
+    keyboard.inline_keyboard.push([
+      { text: '📤 Подтвердить оплату', callback_data: `receipt_${orderId}` }
+    ]);
+
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: order.telegram_user_id,
+      text: confirmMessage,
+      parse_mode: 'HTML',
+      reply_markup: keyboard
+    });
+
+    // Сохраняем связь для обработки чека
+    pendingReceipts.set(orderId, {
+      userId: order.telegram_user_id,
+      orderNumber: orderId.slice(-6),
+      total: order.total,
+      customerName: order.customer_name
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка подтверждения заказа:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Предложить изменения
+app.post('/api/propose-changes', async (req, res) => {
+  try {
+    const { orderId, comment, newPrice, telegramUserId } = req.body;
+
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: telegramUserId,
+      text: `⚠️ <b>По вашему заказу есть уточнения</b>\n\n${comment}\n\n💰 Предлагаемая цена: ${newPrice}₸\n\nЧто выберете?`,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `✅ Согласен на ${newPrice}₸`, callback_data: `accept_proposal_${orderId}` }],
+          [{ text: '🎨 Хочу обсудить', url: `tg://user?id=${ADMIN_ID}` }],
+          [{ text: '❌ Отменить заказ', callback_data: `cancel_order_${orderId}` }]
+        ]
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка отправки предложения:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Отклонить заказ
+app.post('/api/reject-order', async (req, res) => {
+  try {
+    const { orderId, reason, telegramUserId } = req.body;
+
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: telegramUserId,
+      text: `😔 <b>К сожалению...</b>\n\n${reason}\n\nНо мы можем предложить другие варианты! Наш менеджер свяжется с вами.`,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '📱 Связаться с менеджером', url: `tg://user?id=${ADMIN_ID}` },
+          { text: '🎂 Выбрать другой торт', web_app: { url: CLIENT_APP_URL } }
+        ]]
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка отклонения заказа:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Запуск сервера
 app.listen(PORT, async () => {
