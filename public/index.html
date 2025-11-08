@@ -46,8 +46,8 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    const SUPABASE_URL = 'https://sfxufaovtljoosekqdgc.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHVmYW92dGxqb29zZWtxZGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4MjI4ODEsImV4cCI6MjA3NzM5ODg4MX0.RyDMkYfzjR7nBd8VoITReLPGSPs2Hqlg1N1fJRu6KEc';
+    const SUPABASE_URL = 'https://yepbabnubbjzvdjnlfzw.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllcGJhYm51YmJqenZkam5sZnp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzUyMjUsImV4cCI6MjA3NzI1MTIyNX0.0XGin1VyO8HmUZr2HuTGNKQqjJTKtFH6mHh75KGkvVs';
     const API_URL = window.location.origin;
     const ADMIN_ID = 8086901919;
     
@@ -79,19 +79,6 @@
         paymentInfo: "Реквизиты для оплаты отправлены вам в личные сообщения бота.",
         paymentNote: "После оформления заказа мы отправим вам реквизиты для оплаты в Kaspi",
         hello: "Привет",
-        // Конструктор торта
-        createCake: "🎨 Создать свой торт",
-        cakeBuilder: "Конструктор торта",
-        step: "Шаг",
-        selectSize: "Выберите размер",
-        selectFilling: "Выберите начинку",
-        selectDecor: "Выберите декор",
-        customDecor: "Свой вариант",
-        uploadPhoto: "Загрузить фото",
-        decorComment: "Опишите желаемый декор",
-        next: "Далее",
-        back: "Назад",
-        addToCartCustom: "Добавить за",
         orderStatuses: {
           pending_payment: "Ожидает оплаты",
           new: "Новый",
@@ -124,19 +111,6 @@
         paymentInfo: "Төлем деректемелері ботқа жеке хабарларда жіберілді.",
         paymentNote: "Тапсырысты рәсімдегеннен кейін Kaspi-де төлеу үшін деректемелерді жібереміз",
         hello: "Сәлем",
-        // Конструктор торта
-        createCake: "🎨 Өз тортыңызды жасаңыз",
-        cakeBuilder: "Торт конструкторы",
-        step: "Қадам",
-        selectSize: "Өлшемді таңдаңыз",
-        selectFilling: "Ішкі құрамды таңдаңыз",
-        selectDecor: "Безендіруді таңдаңыз",
-        customDecor: "Өз нұсқаңыз",
-        uploadPhoto: "Фото жүктеу",
-        decorComment: "Қалаған безендіруді сипаттаңыз",
-        next: "Әрі қарай",
-        back: "Артқа",
-        addToCartCustom: "Қосу",
         orderStatuses: {
           pending_payment: "Төлем күтілуде",
           new: "Жаңа",
@@ -145,27 +119,6 @@
           cancelled: "Жойылды"
         }
       }
-    };
-
-    // Опции конструктора торта
-    const cakeOptions = {
-      sizes: [
-        { id: 'small', name_ru: 'Маленький (1 чел)', name_kk: 'Кіші (1 адам)', price: 3000, image: '🧁' },
-        { id: 'medium', name_ru: 'Средний (2-3 чел)', name_kk: 'Орташа (2-3 адам)', price: 5000, image: '🎂' },
-        { id: 'large', name_ru: 'Большой (4-6 чел)', name_kk: 'Үлкен (4-6 адам)', price: 8000, image: '🍰' }
-      ],
-      fillings: [
-        { id: 'vanilla', name_ru: 'Ванильный крем', name_kk: 'Ванильді крем', price: 0 },
-        { id: 'chocolate', name_ru: 'Шоколадный крем', name_kk: 'Шоколадты крем', price: 0 },
-        { id: 'strawberry', name_ru: 'Клубничный крем', name_kk: 'Құлпынайлы крем', price: 0 },
-        { id: 'cheese', name_ru: 'Сырный крем', name_kk: 'Ірімшікті крем', price: 500 }
-      ],
-      decors: [
-        { id: 'minimal', name_ru: 'Минималистичный', name_kk: 'Минималистік', price: 500, image: '✨' },
-        { id: 'flowers', name_ru: 'Цветочный', name_kk: 'Гүлдер', price: 1000, image: '🌸' },
-        { id: 'berries', name_ru: 'С ягодами', name_kk: 'Жидектермен', price: 1500, image: '🍓' },
-        { id: 'custom', name_ru: 'Свой вариант', name_kk: 'Өз нұсқасы', price: 2000, image: '🎨' }
-      ]
     };
 
     const ShoppingCartIcon = () => (
@@ -222,20 +175,7 @@
       const [telegramUser, setTelegramUser] = useState(null);
       const [settings, setSettings] = useState(null);
       const [lang, setLang] = useState('ru'); // Текущий язык
-      const [toast, setToast] = useState(null); // Для уведомлений
-      const [addedProductId, setAddedProductId] = useState(null); // Для анимации кнопки
-      const [isSubmitting, setIsSubmitting] = useState(false); // Для блокировки кнопки заказа
-      
-      // Конструктор торта
-      const [showBuilder, setShowBuilder] = useState(false);
-      const [builderStep, setBuilderStep] = useState(1);
-      const [customCake, setCustomCake] = useState({
-        size: null,
-        filling: null,
-        decor: null,
-        customDecorImage: null,
-        customDecorComment: ''
-      });
+      const [toast, setToast] = useState(null); // Toast уведомления
       const [orderForm, setOrderForm] = useState({
         name: '',
         phone: '',
@@ -323,7 +263,6 @@
           const { data, error } = await supabase
             .from('products')
             .select('*')
-            .eq('available', true)  // Показываем только товары в наличии
             .order('created_at', { ascending: false });
 
           if (error) throw error;
@@ -343,7 +282,7 @@
             .from('orders')
             .select('*')
             .eq('telegram_user_id', telegramUser.id)
-            .order('created_at', { ascending: false });
+            .order('date', { ascending: false });
 
           if (error) throw error;
           setMyOrders(data || []);
@@ -365,23 +304,11 @@
           setCart([...cart, { ...product, quantity: 1 }]);
         }
         
-        // Показываем toast уведомление
-        const productName = lang === 'ru' ? product.name : product.name_kk;
+        // Toast уведомление
         setToast({
-          message: lang === 'ru' ? `✅ ${productName} добавлен в корзину` : `✅ ${productName} себетке қосылды`,
+          message: lang === 'ru' ? '✅ Добавлено в корзину!' : '✅ Себетке қосылды!',
           type: 'success'
         });
-        
-        // Анимация кнопки
-        setAddedProductId(product.id);
-        setTimeout(() => setAddedProductId(null), 1000);
-        
-        // Вибрация (если поддерживается)
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-        }
-        
-        // Убираем toast через 2 секунды
         setTimeout(() => setToast(null), 2000);
       };
 
@@ -399,86 +326,6 @@
         return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       };
 
-      // Функции конструктора торта
-      const openCakeBuilder = () => {
-        setShowBuilder(true);
-        setBuilderStep(1);
-        setCustomCake({
-          size: null,
-          filling: null,
-          decor: null,
-          customDecorImage: null,
-          customDecorComment: ''
-        });
-      };
-
-      const closeCakeBuilder = () => {
-        setShowBuilder(false);
-        setBuilderStep(1);
-      };
-
-      const getCustomCakePrice = () => {
-        let total = 0;
-        if (customCake.size) {
-          total += cakeOptions.sizes.find(s => s.id === customCake.size)?.price || 0;
-        }
-        if (customCake.filling) {
-          total += cakeOptions.fillings.find(f => f.id === customCake.filling)?.price || 0;
-        }
-        if (customCake.decor) {
-          total += cakeOptions.decors.find(d => d.id === customCake.decor)?.price || 0;
-        }
-        return total;
-      };
-
-      const addCustomCakeToCart = () => {
-        if (!customCake.size || !customCake.filling || !customCake.decor) {
-          setToast({
-            message: lang === 'ru' ? '❌ Выберите все параметры' : '❌ Барлық параметрлерді таңдаңыз',
-            type: 'error'
-          });
-          setTimeout(() => setToast(null), 2000);
-          return;
-        }
-
-        const sizeName = cakeOptions.sizes.find(s => s.id === customCake.size)?.[`name_${lang}`];
-        const fillingName = cakeOptions.fillings.find(f => f.id === customCake.filling)?.[`name_${lang}`];
-        const decorName = cakeOptions.decors.find(d => d.id === customCake.decor)?.[`name_${lang}`];
-
-        const customProduct = {
-          id: `custom_${Date.now()}`,
-          name: `${lang === 'ru' ? 'Торт на заказ' : 'Тапсырысқа торт'}: ${sizeName}`,
-          name_kk: `Тапсырысқа торт: ${sizeName}`,
-          price: getCustomCakePrice(),
-          image: '🎂',
-          category: 'custom',
-          description: `${sizeName}, ${fillingName}, ${decorName}`,
-          customDetails: {
-            ...customCake,
-            sizeName,
-            fillingName,
-            decorName
-          },
-          quantity: 1
-        };
-
-        setCart([...cart, customProduct]);
-        
-        // Показываем успех
-        setToast({
-          message: lang === 'ru' ? '✅ Торт добавлен в корзину!' : '✅ Торт себетке қосылды!',
-          type: 'success'
-        });
-        setTimeout(() => setToast(null), 2000);
-        
-        // Вибрация
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-        }
-
-        closeCakeBuilder();
-      };
-
       const repeatOrder = (order) => {
         setCart(order.items.map(item => ({
           ...item,
@@ -487,21 +334,44 @@
         setView('cart');
       };
 
+      const sendTelegramNotification = async (order) => {
+        try {
+          await fetch(`${API_URL}/api/send-order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId: order.id,
+              date: order.date,
+              customerName: order.customer_name,
+              customerPhone: order.customer_phone,
+              customerComment: order.customer_comment,
+              telegramUserId: order.telegram_user_id,
+              telegramUsername: order.telegram_username,
+              items: order.items,
+              total: order.total,
+              paymentEnabled: settings?.payment_enabled || false,
+              kaspiPhone: settings?.kaspi_phone || '',
+              kaspiLink: settings?.kaspi_link || ''
+            })
+          });
+        } catch (error) {
+          console.error('Ошибка отправки уведомления админу:', error);
+        }
+      };
+
+      const sendPaymentInfo = async (order) => {
+        // Сервер сам отправит реквизиты если payment_enabled
+      };
+
       const submitOrder = async () => {
         if (!orderForm.name || !orderForm.phone) {
           alert(t.fillRequired);
           return;
         }
 
-        // Блокируем кнопку
-        setIsSubmitting(true);
-        
-        // Вибрация при отправке
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        }
-
         const order = {
+          id: Date.now().toString(),
+          date: new Date().toISOString(),
           customer_name: orderForm.name,
           customer_phone: orderForm.phone,
           customer_comment: orderForm.comment,
@@ -515,56 +385,36 @@
         };
 
         try {
-          // Отправляем заказ на сервер - он сам обработает всё (фото, БД, уведомления)
-          const response = await fetch(`${API_URL}/api/create-order`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(order)
-          });
+          const { error } = await supabase
+            .from('orders')
+            .insert([order]);
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Ошибка создания заказа');
-          }
-
-          const result = await response.json();
+          if (error) throw error;
           
+          await sendTelegramNotification(order);
+          await sendPaymentInfo(order);
+
           setCart([]);
           setOrderForm({ ...orderForm, comment: '' });
           setView('catalog');
           await loadMyOrders();
           
-          // Показываем toast успеха с подсказкой про Telegram
+          // Toast с подсказкой про Telegram
           setToast({
             message: lang === 'ru' 
               ? '✅ Заказ отправлен! Скоро придёт сообщение в чат с деталями оплаты' 
               : '✅ Тапсырыс жіберілді! Төлем туралы чатқа жақында хабар келеді',
             type: 'success'
           });
-          setTimeout(() => setToast(null), 5000);  // Показываем дольше (5 сек)
-          
-          // Успешная вибрация
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-          }
+          setTimeout(() => setToast(null), 5000);
           
         } catch (error) {
           console.error('Ошибка при отправке заказа:', error);
-          
-          // Показываем toast ошибки
           setToast({
             message: lang === 'ru' ? '❌ Ошибка при отправке заказа' : '❌ Тапсырысты жіберу қатесі',
             type: 'error'
           });
           setTimeout(() => setToast(null), 3000);
-          
-          // Вибрация ошибки
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
-          }
-        } finally {
-          // Разблокируем кнопку
-          setIsSubmitting(false);
         }
       };
 
@@ -670,8 +520,8 @@
                       <button onClick={() => setView('cart')} className="relative p-2 bg-pink-500 text-white rounded-full">
                         <ShoppingCartIcon />
                         {cart.length > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-pulse">
-                            {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                            {cart.length}
                           </span>
                         )}
                       </button>
@@ -694,17 +544,6 @@
                 </div>
               </div>
 
-              {/* Кнопка конструктора торта */}
-              <div className="px-4 pt-4">
-                <button
-                  onClick={openCakeBuilder}
-                  className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all"
-                >
-                  <span className="text-2xl">🎨</span>
-                  <span>{t.createCake}</span>
-                </button>
-              </div>
-
               <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {filteredProducts.map(product => (
                   <div key={product.id} className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -714,23 +553,8 @@
                       <p className="text-gray-600 text-xs mt-1 line-clamp-2 flex-1">{getProductDescription(product)}</p>
                       <div className="flex flex-col gap-2 mt-3">
                         <span className="text-lg font-bold text-pink-500">{product.price} ₸</span>
-                        <button 
-                          onClick={() => addToCart(product)} 
-                          className={`${
-                            addedProductId === product.id 
-                              ? 'bg-gradient-to-r from-emerald-400 to-cyan-400 scale-105' 
-                              : 'bg-pink-500'
-                          } text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs sm:text-sm transition-all duration-300 transform hover:scale-105`}
-                        >
-                          {addedProductId === product.id ? (
-                            <>
-                              <span>✓</span> {lang === 'ru' ? 'В корзине' : 'Себетте'}
-                            </>
-                          ) : (
-                            <>
-                              <PlusIcon /> {t.addToCart}
-                            </>
-                          )}
+                        <button onClick={() => addToCart(product)} className="bg-pink-500 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs sm:text-sm hover:bg-pink-600 transition">
+                          <PlusIcon /> {t.addToCart}
                         </button>
                       </div>
                     </div>
@@ -791,259 +615,6 @@
                   })}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Конструктор торта */}
-          {showBuilder && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end justify-center">
-              <div className="bg-white w-full max-w-lg rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">{t.cakeBuilder}</h2>
-                  <button onClick={closeCakeBuilder} className="text-gray-400 hover:text-gray-600">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-center mb-6">
-                  <div className="flex items-center gap-2">
-                    {[1, 2, 3].map(step => (
-                      <div key={step} className="flex items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                          builderStep >= step ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-400'
-                        }`}>
-                          {step}
-                        </div>
-                        {step < 3 && <div className={`w-12 h-1 ${builderStep > step ? 'bg-pink-500' : 'bg-gray-200'}`}></div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Шаг 1: Размер */}
-                {builderStep === 1 && (
-                  <div>
-                    <h3 className="text-lg font-bold mb-4">{t.step} 1: {t.selectSize}</h3>
-                    <div className="space-y-3">
-                      {cakeOptions.sizes.map(size => (
-                        <button
-                          key={size.id}
-                          onClick={() => setCustomCake({...customCake, size: size.id})}
-                          className={`w-full p-4 rounded-xl border-2 transition-all ${
-                            customCake.size === size.id 
-                              ? 'border-pink-500 bg-pink-50' 
-                              : 'border-gray-200 hover:border-pink-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="text-3xl">{size.image}</span>
-                              <div className="text-left">
-                                <p className="font-bold">{lang === 'ru' ? size.name_ru : size.name_kk}</p>
-                                <p className="text-pink-500 font-bold">{size.price} ₸</p>
-                              </div>
-                            </div>
-                            {customCake.size === size.id && (
-                              <span className="text-pink-500 text-xl">✓</span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Шаг 2: Начинка */}
-                {builderStep === 2 && (
-                  <div>
-                    <h3 className="text-lg font-bold mb-4">{t.step} 2: {t.selectFilling}</h3>
-                    <div className="space-y-3">
-                      {cakeOptions.fillings.map(filling => (
-                        <button
-                          key={filling.id}
-                          onClick={() => setCustomCake({...customCake, filling: filling.id})}
-                          className={`w-full p-4 rounded-xl border-2 transition-all ${
-                            customCake.filling === filling.id 
-                              ? 'border-pink-500 bg-pink-50' 
-                              : 'border-gray-200 hover:border-pink-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="text-left">
-                              <p className="font-bold">{lang === 'ru' ? filling.name_ru : filling.name_kk}</p>
-                              {filling.price > 0 && (
-                                <p className="text-pink-500 font-bold">+{filling.price} ₸</p>
-                              )}
-                            </div>
-                            {customCake.filling === filling.id && (
-                              <span className="text-pink-500 text-xl">✓</span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Шаг 3: Декор */}
-                {builderStep === 3 && (
-                  <div>
-                    <h3 className="text-lg font-bold mb-4">{t.step} 3: {t.selectDecor}</h3>
-                    <div className="space-y-3">
-                      {cakeOptions.decors.map(decor => (
-                        <button
-                          key={decor.id}
-                          onClick={() => setCustomCake({...customCake, decor: decor.id})}
-                          className={`w-full p-4 rounded-xl border-2 transition-all ${
-                            customCake.decor === decor.id 
-                              ? 'border-pink-500 bg-pink-50' 
-                              : 'border-gray-200 hover:border-pink-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="text-3xl">{decor.image}</span>
-                              <div className="text-left">
-                                <p className="font-bold">{lang === 'ru' ? decor.name_ru : decor.name_kk}</p>
-                                <p className="text-pink-500 font-bold">+{decor.price} ₸</p>
-                              </div>
-                            </div>
-                            {customCake.decor === decor.id && (
-                              <span className="text-pink-500 text-xl">✓</span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    {customCake.decor === 'custom' && (
-                      <div className="mt-4 p-4 bg-yellow-50 rounded-xl space-y-3">
-                        <p className="text-sm text-gray-700 font-medium">{t.decorComment}:</p>
-                        <textarea
-                          value={customCake.customDecorComment}
-                          onChange={(e) => setCustomCake({...customCake, customDecorComment: e.target.value})}
-                          className="w-full p-3 border border-gray-300 rounded-lg"
-                          rows="3"
-                          placeholder={lang === 'ru' ? 'Опишите желаемый декор' : 'Қалаған безендіруді сипаттаңыз'}
-                        />
-                        
-                        {/* Загрузка фото референса */}
-                        <div>
-                          <label className="block text-sm text-gray-700 font-medium mb-2">
-                            {lang === 'ru' ? '📸 Загрузить фото референса:' : '📸 Референс фотосын жүктеу:'}
-                          </label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files[0];
-                              if (file) {
-                                // Проверка размера (макс 5MB)
-                                if (file.size > 5 * 1024 * 1024) {
-                                  setToast({
-                                    message: lang === 'ru' ? '❌ Файл слишком большой (макс 5MB)' : '❌ Файл тым үлкен (макс 5MB)',
-                                    type: 'error'
-                                  });
-                                  setTimeout(() => setToast(null), 2000);
-                                  return;
-                                }
-                                
-                                // Конвертируем в base64 для предпросмотра
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setCustomCake({
-                                    ...customCake, 
-                                    customDecorImage: reader.result
-                                  });
-                                  setToast({
-                                    message: lang === 'ru' ? '✅ Фото загружено!' : '✅ Фото жүктелді!',
-                                    type: 'success'
-                                  });
-                                  setTimeout(() => setToast(null), 2000);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="block w-full text-sm text-gray-500
-                              file:mr-4 file:py-2 file:px-4
-                              file:rounded-full file:border-0
-                              file:text-sm file:font-semibold
-                              file:bg-pink-50 file:text-pink-700
-                              hover:file:bg-pink-100
-                              cursor-pointer"
-                          />
-                          
-                          {/* Предпросмотр фото */}
-                          {customCake.customDecorImage && (
-                            <div className="mt-3 relative">
-                              <img 
-                                src={customCake.customDecorImage} 
-                                alt="Референс" 
-                                className="w-full h-48 object-cover rounded-lg"
-                              />
-                              <button
-                                onClick={() => setCustomCake({...customCake, customDecorImage: null})}
-                                className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Итоговая цена */}
-                <div className="mt-6 p-4 bg-pink-50 rounded-xl">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-bold">{t.total}:</span>
-                    <span className="text-2xl font-bold text-pink-500">{getCustomCakePrice()} ₸</span>
-                  </div>
-                </div>
-
-                {/* Кнопки навигации */}
-                <div className="mt-6 flex gap-3">
-                  {builderStep > 1 && (
-                    <button
-                      onClick={() => setBuilderStep(builderStep - 1)}
-                      className="flex-1 py-3 border-2 border-pink-500 text-pink-500 rounded-xl font-bold"
-                    >
-                      {t.back}
-                    </button>
-                  )}
-                  {builderStep < 3 ? (
-                    <button
-                      onClick={() => {
-                        if (builderStep === 1 && !customCake.size) {
-                          setToast({ message: lang === 'ru' ? '⚠️ Выберите размер' : '⚠️ Өлшемді таңдаңыз', type: 'error' });
-                          setTimeout(() => setToast(null), 2000);
-                          return;
-                        }
-                        if (builderStep === 2 && !customCake.filling) {
-                          setToast({ message: lang === 'ru' ? '⚠️ Выберите начинку' : '⚠️ Ішкі құрамды таңдаңыз', type: 'error' });
-                          setTimeout(() => setToast(null), 2000);
-                          return;
-                        }
-                        setBuilderStep(builderStep + 1);
-                      }}
-                      className="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold"
-                    >
-                      {t.next}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={addCustomCakeToCart}
-                      className="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold"
-                    >
-                      {t.addToCartCustom} {getCustomCakePrice()} ₸
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
           )}
 
@@ -1151,29 +722,8 @@
                     <span className="text-pink-500">{getTotalPrice()} ₸</span>
                   </div>
                 </div>
-                <button 
-                  onClick={submitOrder} 
-                  disabled={isSubmitting}
-                  className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${
-                    isSubmitting 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-pink-500 hover:bg-pink-600 text-white'
-                  }`}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>{lang === 'ru' ? 'Отправка...' : 'Жіберілуде...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>📦</span>
-                      <span>{t.submitOrder}</span>
-                    </>
-                  )}
+                <button onClick={submitOrder} className="w-full bg-pink-500 text-white py-3 rounded-lg font-bold">
+                  {t.submitOrder}
                 </button>
               </div>
             </div>
