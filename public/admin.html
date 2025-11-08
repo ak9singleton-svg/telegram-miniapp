@@ -24,8 +24,8 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    const SUPABASE_URL = 'https://yepbabnubbjzvdjnlfzw.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllcGJhYm51YmJqenZkam5sZnp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzUyMjUsImV4cCI6MjA3NzI1MTIyNX0.0XGin1VyO8HmUZr2HuTGNKQqjJTKtFH6mHh75KGkvVs';
+    const SUPABASE_URL = 'https://sfxufaovtljoosekqdgc.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmeHVmYW92dGxqb29zZWtxZGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4MjI4ODEsImV4cCI6MjA3NzM5ODg4MX0.RyDMkYfzjR7nBd8VoITReLPGSPs2Hqlg1N1fJRu6KEc';
     const API_URL = window.location.origin;
     const ADMIN_ID = 8086901919;
     
@@ -59,6 +59,13 @@
       });
       
       const [orderFilter, setOrderFilter] = useState('all');
+      const [categoryFilter, setCategoryFilter] = useState('all');  // Фильтр категорий товаров
+      
+      
+      // Система согласования
+      const [negotiationModal, setNegotiationModal] = useState(null);
+      const [negotiationPrice, setNegotiationPrice] = useState('');
+      const [negotiationComment, setNegotiationComment] = useState('');
 
       useEffect(() => {
         if (window.Telegram?.WebApp) {
@@ -137,13 +144,17 @@
 
       const loadOrders = async () => {
         try {
+          console.time('⏱️ Загрузка заказов');
           const { data, error } = await supabase
             .from('orders')
             .select('*')
-            .order('date', { ascending: false});
+            .order('created_at', { ascending: false})
+            .limit(50);  // Загружаем только 50 последних заказов!
 
           if (error) throw error;
           setOrders(data || []);
+          console.timeEnd('⏱️ Загрузка заказов');
+          console.log(`✅ Загружено заказов: ${data?.length || 0}`);
         } catch (error) {
           console.error('Ошибка загрузки заказов:', error);
         }
@@ -303,6 +314,126 @@
         }
       };
 
+      // Функции системы согласования
+      const isCustomCake = (order) => {
+        return order.items.some(item => 
+          item.customCake || 
+          item.customDetails ||                    // ← ДОБАВЛЕНО!
+          item.name.includes('Кастомный') || 
+          item.name.includes('Тапсырысқа') ||
+          item.name.includes('Торт на заказ') ||
+          item.name.includes('тапсырысқа торт')
+        );
+      };
+
+      const openNegotiationModal = (order) => {
+        setNegotiationModal(order);
+        setNegotiationPrice(order.total.toString());
+        setNegotiationComment('');
+      };
+
+      const closeNegotiationModal = () => {
+        setNegotiationModal(null);
+        setNegotiationPrice('');
+        setNegotiationComment('');
+      };
+
+      const confirmOrderAsIs = async (orderId) => {
+        try {
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'processing',
+              negotiation_status: 'confirmed'
+            })
+            .eq('id', orderId);
+
+          await fetch(`${API_URL}/api/confirm-order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId })
+          });
+
+          alert('✅ Заказ подтверждён!');
+          loadOrders();
+        } catch (error) {
+          console.error('Ошибка подтверждения:', error);
+          alert('Ошибка при подтверждении заказа');
+        }
+      };
+
+      const proposeChanges = async () => {
+        if (!negotiationComment.trim()) {
+          alert('Напишите комментарий для клиента');
+          return;
+        }
+
+        try {
+          await supabase
+            .from('orders')
+            .update({ 
+              admin_comment: negotiationComment,
+              proposed_price: parseInt(negotiationPrice) || negotiationModal.total,
+              negotiation_status: 'pending',
+              status: 'negotiation'
+            })
+            .eq('id', negotiationModal.id);
+
+          await fetch(`${API_URL}/api/propose-changes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId: negotiationModal.id,
+              comment: negotiationComment,
+              newPrice: parseInt(negotiationPrice) || negotiationModal.total,
+              telegramUserId: negotiationModal.telegram_user_id
+            })
+          });
+
+          alert('✅ Предложение отправлено клиенту!');
+          closeNegotiationModal();
+          loadOrders();
+        } catch (error) {
+          console.error('Ошибка отправки предложения:', error);
+          alert('Ошибка при отправке предложения');
+        }
+      };
+
+      const rejectOrder = async () => {
+        if (!negotiationComment.trim()) {
+          alert('Напишите причину отклонения');
+          return;
+        }
+
+        try {
+          await supabase
+            .from('orders')
+            .update({ 
+              admin_comment: negotiationComment,
+              negotiation_status: 'rejected',
+              status: 'cancelled'
+            })
+            .eq('id', negotiationModal.id);
+
+          await fetch(`${API_URL}/api/reject-order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId: negotiationModal.id,
+              reason: negotiationComment,
+              telegramUserId: negotiationModal.telegram_user_id
+            })
+          });
+
+          alert('✅ Заказ отклонён');
+          closeNegotiationModal();
+          loadOrders();
+        } catch (error) {
+          console.error('Ошибка отклонения:', error);
+          alert('Ошибка при отклонении заказа');
+        }
+      };
+
       const getStatusColor = (status) => {
         switch (status) {
           case 'pending_payment': return 'bg-orange-100 text-orange-800';
@@ -373,11 +504,40 @@
               <button onClick={() => setShowProductForm(true)} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium mb-4">
                 + Добавить товар
               </button>
+              
+              {/* Фильтр по категориям */}
+              <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+                    categoryFilter === 'all'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  Все
+                </button>
+                {[...new Set(products.map(p => p.category))].map(category => (
+                  <button
+                    key={category}
+                    onClick={() => setCategoryFilter(category)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+                      categoryFilter === category
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Список товаров */}
               <div className="space-y-3">
-                {products.map(product => (
+                {products.filter(p => categoryFilter === 'all' || p.category === categoryFilter).map(product => (
                   <div key={product.id} className="bg-white rounded-lg p-4 shadow-sm">
                     <div className="flex gap-3">
-                      <img src={product.image} alt={product.name} className="w-20 h-20 object-cover rounded-lg" />
+                      <img src={product.image} alt={product.name} className="w-20 h-20 object-cover rounded-lg" loading="lazy" />
                       <div className="flex-1">
                         <h3 className="font-bold text-gray-800">{product.name}</h3>
                         {product.name_kk && (
@@ -557,6 +717,29 @@
                           <span className="text-indigo-600">{order.total} ₸</span>
                         </div>
                       </div>
+                      
+                      {/* Блок согласования для кастомных тортов */}
+                      {isCustomCake(order) && (order.status === 'new' || order.status === 'pending_payment') && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                          <p className="text-sm font-medium text-yellow-800 mb-2">
+                            🎂 Кастомный торт - требуется согласование
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => confirmOrderAsIs(order.id)}
+                              className="flex-1 py-2 px-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+                            >
+                              ✅ Подтвердить как есть
+                            </button>
+                            <button
+                              onClick={() => openNegotiationModal(order)}
+                              className="flex-1 py-2 px-3 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600"
+                            >
+                              ✏️ Предложить изменения
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       
                       <div className="flex gap-2">
                         <button
@@ -804,6 +987,133 @@
                   >
                     💾 Сохранить
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Модальное окно согласования */}
+          {negotiationModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-800">
+                      ✏️ Согласование заказа #{negotiationModal.id.slice(-6)}
+                    </h3>
+                    <button 
+                      onClick={closeNegotiationModal}
+                      className="text-gray-400 hover:text-gray-600 text-2xl"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {/* Информация о заказе */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Товары:</p>
+                    {negotiationModal.items.map((item, idx) => (
+                      <div key={idx} className="text-sm mb-2">
+                        <p className="font-medium">{item.name}</p>
+                        {(item.customCake || item.customDetails) && (
+                          <div className="text-xs text-gray-600 ml-2 mt-1 space-y-1">
+                            {item.customCake && (
+                              <>
+                                <p>🎂 Ярусов: {item.customCake.tiers}</p>
+                                <p>⚖️ Вес: {item.customCake.weight} кг</p>
+                                <p>🍰 Начинка: {item.customCake.filling}</p>
+                                <p>🎨 Крем: {item.customCake.cream}</p>
+                                {item.customCake.topper && <p>🎀 Топпер: Да</p>}
+                                {item.customCake.referencePhoto && (
+                                  <div className="mt-2">
+                                    <p className="mb-1">📸 Референс:</p>
+                                    <img 
+                                      src={item.customCake.referencePhoto} 
+                                      alt="Референс" 
+                                      className="w-32 h-32 object-cover rounded"
+                                    />
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            {item.customDetails && (
+                              <>
+                                <p>📏 Размер: {item.customDetails.sizeName || item.customDetails.size}</p>
+                                <p>🍰 Начинка: {item.customDetails.fillingName || item.customDetails.filling}</p>
+                                <p>🎨 Декор: {item.customDetails.decorName || item.customDetails.decor}</p>
+                                {item.customDetails.customDecorImage && (
+                                  <div className="mt-2">
+                                    <p className="mb-1">📸 Референс декора:</p>
+                                    <img 
+                                      src={item.customDetails.customDecorImage} 
+                                      alt="Референс" 
+                                      className="w-32 h-32 object-cover rounded"
+                                    />
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div className="border-t mt-2 pt-2">
+                      <p className="text-sm"><strong>Оригинальная цена:</strong> {negotiationModal.total} ₸</p>
+                    </div>
+                  </div>
+
+                  {/* Форма согласования */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Новая цена (₸)
+                      </label>
+                      <input
+                        type="number"
+                        value={negotiationPrice}
+                        onChange={(e) => setNegotiationPrice(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="15000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Сообщение клиенту *
+                      </label>
+                      <textarea
+                        value={negotiationComment}
+                        onChange={(e) => setNegotiationComment(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        rows="4"
+                        placeholder="Такой декор технически сложен. Мы можем предложить..."
+                      />
+                    </div>
+
+                    {/* Кнопки действий */}
+                    <div className="space-y-2">
+                      <button
+                        onClick={proposeChanges}
+                        className="w-full py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600"
+                      >
+                        📤 Отправить предложение
+                      </button>
+                      
+                      <button
+                        onClick={rejectOrder}
+                        className="w-full py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600"
+                      >
+                        ❌ Отклонить заказ
+                      </button>
+                      
+                      <button
+                        onClick={closeNegotiationModal}
+                        className="w-full py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
