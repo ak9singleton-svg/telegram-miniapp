@@ -35,6 +35,221 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // Хранилище для временных данных (orderId -> userId)
 const pendingReceipts = new Map();
 
+// Функция отправки заказа в Telegram (переиспользуемая)
+async function sendOrderToTelegram(orderData) {
+  const { 
+    orderId, 
+    customerName, 
+    customerPhone, 
+    customerComment,
+    telegramUserId, 
+    telegramUsername, 
+    total,
+    paymentEnabled,
+    kaspiPhone,
+    kaspiLink
+  } = orderData;
+  
+  let items = orderData.items;
+
+  // Формируем сообщение админу
+  let message = "🆕 <b>НОВЫЙ ЗАКАЗ!</b>\n\n";
+  message += `📋 Заказ #${orderId.slice(-6)}\n`;
+  message += `📅 ${new Date().toLocaleString('ru-RU')}\n\n`;
+  
+  message += "<b>👤 Клиент:</b>\n";
+  message += `Имя: ${customerName}\n`;
+  message += `Телефон: ${customerPhone}\n`;
+  if (telegramUsername) message += `Telegram: @${telegramUsername}\n`;
+  if (telegramUserId) message += `ID: ${telegramUserId}\n`;
+  if (customerComment) message += `\nКомментарий: ${customerComment}\n`;
+  
+  message += "\n<b>🛒 Товары:</b>\n";
+  items.forEach(item => {
+    message += `• ${item.name} x${item.quantity} = ${item.price * item.quantity} ₸\n`;
+    
+    // Если это кастомный торт - добавляем детали
+    if (item.customDetails) {
+      message += `  <i>Детали:</i>\n`;
+      message += `  - Размер: ${item.customDetails.sizeName}\n`;
+      message += `  - Начинка: ${item.customDetails.fillingName}\n`;
+      message += `  - Декор: ${item.customDetails.decorName}\n`;
+      if (item.customDetails.customDecorComment) {
+        message += `  - Описание: ${item.customDetails.customDecorComment}\n`;
+      }
+      if (item.customDetails.customDecorImage) {
+        message += `  - 📸 Фото референса прикреплено\n`;
+      }
+    }
+  });
+  
+  message += `\n<b>💰 Итого: ${total} ₸</b>`;
+
+  if (paymentEnabled) {
+    message += `\n\n⏰ <b>Статус:</b> Ожидает оплаты`;
+  }
+
+  // Отправляем админу
+  await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    chat_id: ADMIN_ID,
+    text: message,
+    parse_mode: 'HTML'
+  });
+
+  // Функция загрузки фото в Storage и замены base64 на URL
+  const uploadPhotoToStorage = async (item, orderId) => {
+    if (!item.customDetails?.customDecorImage) return item;
+    
+    try {
+      // Если это уже URL (начинается с http) - не трогаем
+      if (item.customDetails.customDecorImage.startsWith('http')) {
+        return item;
+      }
+
+      // Извлекаем base64 данные
+      const base64Data = item.customDetails.customDecorImage.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Генерируем уникальное имя файла
+      const fileName = `${orderId}-${Date.now()}.jpg`;
+      
+      // Загружаем в Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('cake-references')
+        .upload(fileName, buffer, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Ошибка загрузки в Storage:', error);
+        return item;
+      }
+
+      // Получаем публичный URL
+      const { data: urlData } = supabase.storage
+        .from('cake-references')
+        .getPublicUrl(fileName);
+
+      // Заменяем base64 на URL
+      return {
+        ...item,
+        customDetails: {
+          ...item.customDetails,
+          customDecorImage: urlData.publicUrl
+        }
+      };
+    } catch (error) {
+      console.error('Ошибка обработки фото:', error);
+      return item;
+    }
+  };
+
+  // Загружаем фото в Storage и заменяем base64 на URLs
+  const itemsWithUrls = await Promise.all(
+    items.map(item => uploadPhotoToStorage(item, orderId))
+  );
+
+  // Обновляем items с URLs вместо base64
+  items = itemsWithUrls;
+
+  // Отправляем фото референсов если есть
+  for (const item of items) {
+    if (item.customDetails?.customDecorImage && item.customDetails.customDecorImage.startsWith('http')) {
+      try {
+        const response = await axios.get(item.customDetails.customDecorImage, {
+          responseType: 'arraybuffer'
+        });
+        const buffer = Buffer.from(response.data);
+        
+        const FormData = require('form-data');
+        const form = new FormData();
+        form.append('chat_id', ADMIN_ID);
+        form.append('photo', buffer, { filename: 'reference.jpg', contentType: 'image/jpeg' });
+        form.append('caption', `📸 <b>Референс для заказа #${orderId.slice(-6)}</b>\n\n${item.name}`, { contentType: 'text/plain' });
+        form.append('parse_mode', 'HTML');
+        
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, form, {
+          headers: form.getHeaders()
+        });
+      } catch (error) {
+        console.error('Ошибка отправки фото референса:', error);
+      }
+    }
+  }
+
+  // Проверяем есть ли кастомный торт в заказе
+  const hasCustomCake = items.some(item => 
+    item.customDetails || 
+    item.customCake ||
+    item.name.includes('Торт на заказ') ||
+    item.name.includes('тапсырысқа торт')
+  );
+
+  // Если включены платежи, отправляем сообщение клиенту
+  if (paymentEnabled && telegramUserId) {
+    
+    if (hasCustomCake) {
+      let customMessage = "🎂 <b>Спасибо за заказ!</b>\n\n";
+      customMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
+      customMessage += `💰 Предварительная сумма: <b>${total} ₸</b>\n\n`;
+      customMessage += "⏳ <b>Ваш заказ на согласовании</b>\n\n";
+      customMessage += "Мы проверяем детали вашего кастомного торта и свяжемся с вами в ближайшее время для подтверждения цены и деталей.\n\n";
+      customMessage += "🇰🇿 <b>Тапсырысыңыз келісімде</b>\n\n";
+      customMessage += "Біз сіздің торттың деталдарын тексеріп жатырмыз және бағаны және деталдарды растау үшін жақын арада сізбен байланысамыз.";
+
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: telegramUserId,
+        text: customMessage,
+        parse_mode: 'HTML'
+      });
+    } else {
+      // Для обычных заказов - отправляем реквизиты с кнопкой оплаты
+      let paymentMessage = "💳 <b>Реквизиты для оплаты / Төлем деректемелері</b>\n\n";
+      paymentMessage += `📋 Заказ / Тапсырыс #${orderId.slice(-6)}\n`;
+      paymentMessage += `💰 Сумма / Сомасы: <b>${total} ₸</b>\n\n`;
+      
+      if (kaspiPhone) {
+        paymentMessage += `📱 <b>Kaspi номер:</b>\n+7${kaspiPhone}\n\n`;
+      }
+      
+      paymentMessage += "После оплаты нажмите кнопку ниже и отправьте скриншот чека.\n";
+      paymentMessage += "Төлегеннен кейін төмендегі батырманы басып, чектің скриншотын жіберіңіз.\n\n";
+      paymentMessage += "Спасибо за заказ! / Тапсырысыңызға рахмет! ❤️";
+
+      const keyboard = {
+        inline_keyboard: []
+      };
+
+      if (kaspiLink) {
+        keyboard.inline_keyboard.push([
+          { text: "💳 Оплатить через Kaspi", url: kaspiLink }
+        ]);
+      }
+
+      keyboard.inline_keyboard.push([
+        { text: "📤 Подтвердить оплату", callback_data: `receipt_${orderId}` }
+      ]);
+
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: telegramUserId,
+        text: paymentMessage,
+        parse_mode: 'HTML',
+        reply_markup: keyboard
+      });
+
+      // Сохраняем связь orderId -> userId для обработки чека
+      pendingReceipts.set(orderId, {
+        userId: telegramUserId,
+        orderNumber: orderId.slice(-6),
+        total: total,
+        customerName: customerName
+      });
+    }
+  }
+}
+
 // API: Создание заказа (новый endpoint)
 app.post('/api/create-order', async (req, res) => {
   try {
@@ -107,19 +322,26 @@ app.post('/api/create-order', async (req, res) => {
         .limit(1)
         .single();
       
-      await axios.post(`${process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000'}/api/send-order`, {
-        orderId: order.id,
-        customerName: order.customer_name,
-        customerPhone: order.customer_phone,
-        customerComment: order.customer_comment,
-        telegramUserId: order.telegram_user_id,
-        telegramUsername: order.telegram_username,
-        items: order.items,
-        total: order.total,
-        paymentEnabled: settings?.payment_enabled || false,
-        kaspiPhone: settings?.kaspi_phone || '',
-        kaspiLink: settings?.kaspi_link || ''
-      });
+      // Вызываем send-order напрямую (мы на том же сервере!)
+      const sendOrderReq = {
+        body: {
+          orderId: order.id,
+          customerName: order.customer_name,
+          customerPhone: order.customer_phone,
+          customerComment: order.customer_comment,
+          telegramUserId: order.telegram_user_id,
+          telegramUsername: order.telegram_username,
+          items: order.items,
+          total: order.total,
+          paymentEnabled: settings?.payment_enabled || false,
+          kaspiPhone: settings?.kaspi_phone || '',
+          kaspiLink: settings?.kaspi_link || ''
+        }
+      };
+      
+      // Импортируем логику из /api/send-order
+      await sendOrderToTelegram(sendOrderReq.body);
+      
     } catch (notifError) {
       console.error('Ошибка отправки уведомления:', notifError);
       // Не возвращаем ошибку - заказ уже создан
