@@ -19,7 +19,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 // URL Mini App
-const BASE_URL = "https://mini-app-tel.onrender.com";
+const BASE_URL = "https://telegram-miniapp-fd6b.onrender.com";
 const CLIENT_APP_URL = BASE_URL;
 const ADMIN_APP_URL = `${BASE_URL}/admin.html`;
 
@@ -1469,7 +1469,7 @@ app.get('/health', (req, res) => {
 async function setupWebhookOnStartup() {
   try {
     // Получаем текущий URL где запущен сервер
-    const webhookUrl = `https://mini-app-tel.onrender.com/webhook`;
+    const webhookUrl = `https://telegram-miniapp-fd6b.onrender.com/webhook`;
     
     // Проверяем текущий webhook
     const checkResponse = await axios.get(
