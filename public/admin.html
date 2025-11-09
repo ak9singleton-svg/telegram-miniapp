@@ -349,7 +349,7 @@
       if (loading) {
         return (
           <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-700 mx-auto"></div>
           </div>
         );
       }
@@ -361,13 +361,13 @@
               <h1 className="text-xl font-bold text-gray-800">Админ-панель</h1>
             </div>
             <div className="flex border-t">
-              <button onClick={() => setActiveTab('products')} className={`flex-1 py-3 text-sm ${activeTab === 'products' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>
+              <button onClick={() => setActiveTab('products')} className={`flex-1 py-3 text-sm ${activeTab === 'products' ? 'border-b-2 border-gray-700 text-gray-700' : 'text-gray-500'}`}>
                 Товары
               </button>
-              <button onClick={() => setActiveTab('orders')} className={`flex-1 py-3 text-sm ${activeTab === 'orders' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>
+              <button onClick={() => setActiveTab('orders')} className={`flex-1 py-3 text-sm ${activeTab === 'orders' ? 'border-b-2 border-gray-700 text-gray-700' : 'text-gray-500'}`}>
                 Заказы ({orders.length})
               </button>
-              <button onClick={() => setActiveTab('settings')} className={`flex-1 py-3 text-sm ${activeTab === 'settings' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>
+              <button onClick={() => setActiveTab('settings')} className={`flex-1 py-3 text-sm ${activeTab === 'settings' ? 'border-b-2 border-gray-700 text-gray-700' : 'text-gray-500'}`}>
                 ⚙️ Настройки
               </button>
             </div>
@@ -375,7 +375,7 @@
 
           {activeTab === 'products' && (
             <div className="p-4">
-              <button onClick={() => setShowProductForm(true)} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium mb-4">
+              <button onClick={() => setShowProductForm(true)} className="w-full bg-gray-700 text-white py-3 rounded-lg font-medium mb-4">
                 + Добавить товар
               </button>
               
@@ -385,7 +385,7 @@
                   onClick={() => setCategoryFilter('all')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
                     categoryFilter === 'all'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 border border-gray-300'
                   }`}
                 >
@@ -397,7 +397,7 @@
                     onClick={() => setCategoryFilter(category)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
                       categoryFilter === category
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-gray-700 text-white'
                         : 'bg-white text-gray-700 border border-gray-300'
                     }`}
                   >
@@ -418,7 +418,7 @@
                         )}
                         <p className="text-sm text-gray-600">{product.description}</p>
                         <div className="flex items-center justify-between mt-2">
-                          <span className="font-bold text-indigo-600">{product.price} ₸</span>
+                          <span className="font-bold text-gray-700">{product.price} ₸</span>
                           <span className="text-xs bg-gray-100 px-2 py-1 rounded">{product.category}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-2">
@@ -453,7 +453,7 @@
                   onClick={() => setOrderFilter('all')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition ${
                     orderFilter === 'all'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-700 border border-gray-300'
                   }`}
                 >
@@ -587,7 +587,7 @@
                         ))}
                         <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                           <span>Итого:</span>
-                          <span className="text-indigo-600">{order.total} ₸</span>
+                          <span className="text-gray-700">{order.total} ₸</span>
                         </div>
                       </div>
                       
@@ -712,7 +712,7 @@
 
                   <button
                     onClick={saveSettings}
-                    className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium"
+                    className="w-full bg-gray-700 text-white py-3 rounded-lg font-medium"
                   >
                     💾 Сохранить настройки
                   </button>
@@ -833,7 +833,7 @@
                   
                   <button 
                     onClick={handleSaveProduct} 
-                    className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium"
+                    className="w-full bg-gray-700 text-white py-3 rounded-lg font-medium"
                   >
                     💾 Сохранить
                   </button>
