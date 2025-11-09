@@ -401,6 +401,53 @@
 
           if (error) throw error;
           
+          // === СОХРАНЯЕМ/ОБНОВЛЯЕМ КЛИЕНТА ===
+          if (telegramUser?.id) {
+            try {
+              // Проверяем существует ли клиент
+              const { data: existingCustomer } = await supabase
+                .from('customers')
+                .select('*')
+                .eq('telegram_user_id', telegramUser.id)
+                .single();
+
+              if (existingCustomer) {
+                // Клиент есть - обновляем данные
+                await supabase
+                  .from('customers')
+                  .update({
+                    phone: orderForm.phone,
+                    telegram_username: telegramUser.username,
+                    telegram_first_name: telegramUser.first_name,
+                    telegram_last_name: telegramUser.last_name,
+                    updated_at: new Date().toISOString(),
+                    total_orders: existingCustomer.total_orders + 1,
+                    total_spent: existingCustomer.total_spent + getTotalPrice(),
+                    last_order_date: new Date().toISOString()
+                  })
+                  .eq('telegram_user_id', telegramUser.id);
+              } else {
+                // Новый клиент - создаём запись
+                await supabase
+                  .from('customers')
+                  .insert([{
+                    telegram_user_id: telegramUser.id,
+                    telegram_username: telegramUser.username,
+                    telegram_first_name: telegramUser.first_name,
+                    telegram_last_name: telegramUser.last_name,
+                    phone: orderForm.phone,
+                    total_orders: 1,
+                    total_spent: getTotalPrice(),
+                    last_order_date: new Date().toISOString()
+                  }]);
+              }
+            } catch (customerError) {
+              console.error('Ошибка сохранения клиента:', customerError);
+              // Не прерываем процесс - заказ уже создан
+            }
+          }
+          // === КОНЕЦ СОХРАНЕНИЯ КЛИЕНТА ===
+          
           await sendTelegramNotification(order);
           await sendPaymentInfo(order);
 
@@ -455,7 +502,7 @@
         return (
           <div className="min-h-screen bg-gradient-to-br from-pink-50 to-orange-50 flex items-center justify-center">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">{lang === 'kk' ? 'Жүктелуде...' : 'Загрузка...'}</p>
             </div>
           </div>
@@ -489,7 +536,7 @@
                         <div className="flex items-center gap-2">
                           <StoreIcon />
                           <div>
-                            <h1 className="text-xl font-bold text-gray-800">{settings?.shop_name || t.shopTitle}</h1>
+                            <h1 className="text-xl font-bold text-gray-800">{settings?.shop_name || 'Магазин'}</h1>
                             {telegramUser && (
                               <p className="text-xs text-gray-500">{t.hello}, {telegramUser.first_name}!</p>
                             )}
@@ -527,7 +574,7 @@
                           <HistoryIcon />
                         </button>
                       )}
-                      <button onClick={() => setView('cart')} className="relative p-2 bg-pink-500 text-white rounded-full">
+                      <button onClick={() => setView('cart')} className="relative p-2 bg-white border-2 border-gray-300 text-gray-700 rounded-full">
                         <ShoppingCartIcon />
                         {cart.length > 0 && (
                           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
@@ -544,7 +591,7 @@
                         key={cat}
                         onClick={() => setSelectedCategory(cat)}
                         className={`px-4 py-2 rounded-full whitespace-nowrap ${
-                          selectedCategory === cat ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-700'
+                          selectedCategory === cat ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'
                         }`}
                       >
                         {cat === 'all' ? t.all : cat}
@@ -562,8 +609,8 @@
                       <h3 className="font-bold text-sm sm:text-base text-gray-800 line-clamp-2">{getProductName(product)}</h3>
                       <p className="text-gray-600 text-xs mt-1 line-clamp-2 flex-1">{getProductDescription(product)}</p>
                       <div className="flex flex-col gap-2 mt-3">
-                        <span className="text-lg font-bold text-pink-500">{product.price} ₸</span>
-                        <button onClick={() => addToCart(product)} className="bg-pink-500 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs sm:text-sm hover:bg-pink-600 transition">
+                        <span className="text-lg font-bold text-gray-700">{product.price} ₸</span>
+                        <button onClick={() => addToCart(product)} className="bg-white border-2 border-gray-300 text-gray-700 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs sm:text-sm hover:bg-gray-50 transition">
                           <PlusIcon /> {t.addToCart}
                         </button>
                       </div>
@@ -609,13 +656,13 @@
                           ))}
                           <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                             <span>{t.total}:</span>
-                            <span className="text-pink-500">{order.total} ₸</span>
+                            <span className="text-gray-700">{order.total} ₸</span>
                           </div>
                         </div>
                         
                         <button
                           onClick={() => repeatOrder(order)}
-                          className="w-full py-2 bg-pink-50 text-pink-600 rounded-lg font-medium flex items-center justify-center gap-2"
+                          className="w-full py-2 bg-gray-50 text-gray-700 rounded-lg font-medium flex items-center justify-center gap-2"
                         >
                           <RepeatIcon />
                           {t.repeatOrder}
@@ -644,7 +691,7 @@
                           <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-lg" />
                           <div className="flex-1">
                             <h3 className="font-bold text-gray-800">{item.name}</h3>
-                            <p className="text-pink-500 font-bold">{item.price} ₸</p>
+                            <p className="text-gray-700 font-bold">{item.price} ₸</p>
                             <div className="flex items-center gap-2 mt-2">
                               <button onClick={() => updateQuantity(item.id, -1)} className="p-1 bg-gray-100 rounded">
                                 <MinusIcon />
@@ -665,10 +712,10 @@
                   <div className="bg-white rounded-lg p-4 shadow-sm mb-4">
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-bold">{t.total}:</span>
-                      <span className="text-2xl font-bold text-pink-500">{getTotalPrice()} ₸</span>
+                      <span className="text-2xl font-bold text-gray-700">{getTotalPrice()} ₸</span>
                     </div>
                   </div>
-                  <button onClick={() => setView('checkout')} className="w-full bg-pink-500 text-white py-3 rounded-lg font-bold">
+                  <button onClick={() => setView('checkout')} className="w-full bg-gray-700 text-white py-3 rounded-lg font-bold hover:bg-gray-800 transition">
                     {t.checkout}
                   </button>
                 </>
@@ -764,10 +811,10 @@
                   ))}
                   <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                     <span>{t.total}:</span>
-                    <span className="text-pink-500">{getTotalPrice()} ₸</span>
+                    <span className="text-gray-700">{getTotalPrice()} ₸</span>
                   </div>
                 </div>
-                <button onClick={submitOrder} className="w-full bg-pink-500 text-white py-3 rounded-lg font-bold">
+                <button onClick={submitOrder} className="w-full bg-gray-700 text-white py-3 rounded-lg font-bold hover:bg-gray-800 transition">
                   {t.submitOrder}
                 </button>
               </div>
