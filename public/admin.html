@@ -96,29 +96,45 @@
 
       const saveSettings = async () => {
         try {
+          console.log('🔧 Сохранение настроек...');
+          console.log('Текущие settings:', settings);
+          
           const { data: existing } = await supabase
             .from('settings')
             .select('id')
             .limit(1)
             .single();
 
+          // Убираем системные поля перед сохранением
+          const { id, created_at, updated_at, ...settingsToSave } = settings;
+          
+          console.log('Сохраняем:', settingsToSave);
+
           if (existing) {
+            console.log('Обновляем существующую запись, ID:', existing.id);
             const { error } = await supabase
               .from('settings')
-              .update(settings)
+              .update(settingsToSave)
               .eq('id', existing.id);
             if (error) throw error;
+            console.log('✅ Обновлено успешно');
           } else {
+            console.log('Создаём новую запись');
             const { error } = await supabase
               .from('settings')
-              .insert([settings]);
+              .insert([settingsToSave]);
             if (error) throw error;
+            console.log('✅ Создано успешно');
           }
           
           alert('✅ Настройки сохранены!');
+          
+          // Перезагружаем настройки чтобы получить актуальные данные
+          await loadSettings();
+          console.log('✅ Настройки перезагружены');
         } catch (error) {
-          console.error('Ошибка сохранения настроек:', error);
-          alert('❌ Ошибка сохранения настроек');
+          console.error('❌ Ошибка сохранения настроек:', error);
+          alert(`❌ Ошибка сохранения настроек: ${error.message}`);
         }
       };
 
