@@ -261,7 +261,7 @@ async function handleWebhook(req, res) {
         let helpText = `🤖 <b>Команды бота:</b>\n\n/start - Главное меню\n/help - Помощь\n/contact - Контакты\n\n`;
         
         if (userId === ADMIN_ID) {
-          helpText += `<b>Команды администратора:</b>\n/broadcast [текст] - Рассылка всем клиентам\n/stats - Статистика заказов\n/detailed_stats - Подробная статистика\n\n`;
+          helpText += `<b>Команды администратора:</b>\n/broadcast [текст] - Рассылка всем клиентам\n/stats - Статистика заказов\n/detailed_stats - Подробная статистика\n/customers - База клиентов\n\n`;
         }
         
         helpText += `Для заказа нажмите на кнопку '📦 Кондитерская'`;
@@ -427,6 +427,64 @@ async function handleWebhook(req, res) {
           await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             chat_id: chatId,
             text: `❌ Ошибка получения статистики: ${error.message}`
+          });
+        }
+        
+        return res.json({ ok: true });
+      }
+
+      // Команда /customers (только для админа) - БАЗА КЛИЕНТОВ
+      if (text === '/customers' && userId === ADMIN_ID) {
+        try {
+          const { data: customers } = await supabase
+            .from('customers')
+            .select('*')
+            .order('total_spent', { ascending: false })
+            .limit(20);
+
+          if (!customers || customers.length === 0) {
+            await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+              chat_id: chatId,
+              text: '📊 База клиентов пуста.\n\nКлиенты появятся после первого заказа через Mini App.',
+              parse_mode: 'HTML'
+            });
+            return res.json({ ok: true });
+          }
+
+          let customersText = `👥 <b>БАЗА КЛИЕНТОВ</b>\n\nТоп-${customers.length} по сумме покупок:\n\n`;
+
+          customers.forEach((customer, index) => {
+            const name = customer.telegram_first_name || 'Аноним';
+            const username = customer.telegram_username ? `@${customer.telegram_username}` : '';
+            const phone = customer.phone || 'Нет номера';
+            const orders = customer.total_orders || 0;
+            const spent = customer.total_spent || 0;
+            const lastOrder = customer.last_order_date 
+              ? new Date(customer.last_order_date).toLocaleDateString('ru-RU')
+              : 'Неизвестно';
+
+            customersText += `${index + 1}. <b>${name}</b> ${username}\n`;
+            customersText += `   📱 ${phone}\n`;
+            customersText += `   📦 Заказов: ${orders} | 💰 ${spent.toLocaleString()}₸\n`;
+            customersText += `   📅 Последний: ${lastOrder}\n\n`;
+          });
+
+          const { data: allCustomers } = await supabase
+            .from('customers')
+            .select('id', { count: 'exact', head: true });
+
+          customersText += `<i>Всего клиентов в базе: ${customers.length}</i>`;
+
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: customersText,
+            parse_mode: 'HTML'
+          });
+        } catch (error) {
+          console.error('Ошибка получения клиентов:', error);
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ Ошибка получения базы клиентов: ${error.message}`
           });
         }
         
