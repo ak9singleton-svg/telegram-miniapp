@@ -35,9 +35,12 @@
       const [activeTab, setActiveTab] = useState('products');
       const [products, setProducts] = useState([]);
       const [orders, setOrders] = useState([]);
+      const [banners, setBanners] = useState([]);
       const [loading, setLoading] = useState(true);
       const [editingProduct, setEditingProduct] = useState(null);
       const [showProductForm, setShowProductForm] = useState(false);
+      const [editingBanner, setEditingBanner] = useState(null);
+      const [showBannerForm, setShowBannerForm] = useState(false);
       const [productForm, setProductForm] = useState({
         name: '', 
         name_kk: '', 
@@ -47,6 +50,16 @@
         category: '', 
         category_kk: '',
         image: ''
+      });
+      const [bannerForm, setBannerForm] = useState({
+        image_url: '',
+        title_ru: '',
+        title_kk: '',
+        description_ru: '',
+        description_kk: '',
+        link: '',
+        order_index: 0,
+        is_active: true
       });
       
       const [settings, setSettings] = useState({
@@ -74,8 +87,23 @@
         setLoading(true);
         await loadProducts();
         await loadOrders();
+        await loadBanners();
         await loadSettings();
         setLoading(false);
+      };
+
+      const loadBanners = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('banners')
+            .select('*')
+            .order('order_index', { ascending: true });
+
+          if (error) throw error;
+          setBanners(data || []);
+        } catch (error) {
+          console.error('Ошибка загрузки баннеров:', error);
+        }
       };
 
       const loadSettings = async () => {
@@ -241,6 +269,95 @@
         }
       };
 
+      // Функции для работы с баннерами
+      const handleSaveBanner = async () => {
+        try {
+          const bannerData = {
+            ...bannerForm,
+            order_index: parseInt(bannerForm.order_index) || 0
+          };
+
+          if (editingBanner) {
+            const { error } = await supabase
+              .from('banners')
+              .update(bannerData)
+              .eq('id', editingBanner.id);
+            
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from('banners')
+              .insert([bannerData]);
+            
+            if (error) throw error;
+          }
+          
+          await loadBanners();
+          setShowBannerForm(false);
+          setEditingBanner(null);
+          setBannerForm({
+            image_url: '',
+            title_ru: '',
+            title_kk: '',
+            description_ru: '',
+            description_kk: '',
+            link: '',
+            order_index: 0,
+            is_active: true
+          });
+        } catch (error) {
+          console.error('Ошибка сохранения баннера:', error);
+          alert('Ошибка сохранения баннера');
+        }
+      };
+
+      const handleDeleteBanner = async (id) => {
+        if (window.confirm('Удалить баннер?')) {
+          try {
+            const { error } = await supabase
+              .from('banners')
+              .delete()
+              .eq('id', id);
+            
+            if (error) throw error;
+            await loadBanners();
+          } catch (error) {
+            console.error('Ошибка удаления баннера:', error);
+            alert('Ошибка удаления баннера');
+          }
+        }
+      };
+
+      const handleEditBanner = (banner) => {
+        setEditingBanner(banner);
+        setBannerForm({
+          image_url: banner.image_url,
+          title_ru: banner.title_ru,
+          title_kk: banner.title_kk,
+          description_ru: banner.description_ru || '',
+          description_kk: banner.description_kk || '',
+          link: banner.link || '',
+          order_index: banner.order_index,
+          is_active: banner.is_active
+        });
+        setShowBannerForm(true);
+      };
+
+      const toggleBannerStatus = async (bannerId, currentStatus) => {
+        try {
+          const { error } = await supabase
+            .from('banners')
+            .update({ is_active: !currentStatus })
+            .eq('id', bannerId);
+          
+          if (error) throw error;
+          await loadBanners();
+        } catch (error) {
+          console.error('Ошибка изменения статуса:', error);
+          alert('Ошибка изменения статуса баннера');
+        }
+      };
+
       const handleEditProduct = (product) => {
         setEditingProduct(product);
         setProductForm({
@@ -380,6 +497,9 @@
               <button onClick={() => setActiveTab('products')} className={`flex-1 py-3 text-sm ${activeTab === 'products' ? 'border-b-2 border-gray-700 text-gray-700' : 'text-gray-500'}`}>
                 Товары
               </button>
+              <button onClick={() => setActiveTab('banners')} className={`flex-1 py-3 text-sm ${activeTab === 'banners' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>
+                🎨 Баннеры
+              </button>
               <button onClick={() => setActiveTab('orders')} className={`flex-1 py-3 text-sm ${activeTab === 'orders' ? 'border-b-2 border-gray-700 text-gray-700' : 'text-gray-500'}`}>
                 Заказы ({orders.length})
               </button>
@@ -457,6 +577,208 @@
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Секция баннеров */}
+          {activeTab === 'banners' && (
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Управление баннерами</h2>
+                <button
+                  onClick={() => {
+                    setShowBannerForm(true);
+                    setEditingBanner(null);
+                    setBannerForm({
+                      image_url: '',
+                      title_ru: '',
+                      title_kk: '',
+                      description_ru: '',
+                      description_kk: '',
+                      link: '',
+                      order_index: banners.length,
+                      is_active: true
+                    });
+                  }}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                >
+                  + Добавить баннер
+                </button>
+              </div>
+
+              {showBannerForm && (
+                <div className="bg-white rounded-lg p-4 shadow-sm mb-4">
+                  <h3 className="font-bold mb-3">
+                    {editingBanner ? 'Редактировать баннер' : 'Новый баннер'}
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm mb-1">URL картинки *</label>
+                      <input
+                        type="text"
+                        value={bannerForm.image_url}
+                        onChange={(e) => setBannerForm({...bannerForm, image_url: e.target.value})}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="https://example.com/image.jpg"
+                      />
+                      {bannerForm.image_url && (
+                        <img src={bannerForm.image_url} alt="Preview" className="mt-2 h-32 w-full object-cover rounded-lg" />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm mb-1">Заголовок (RU) *</label>
+                        <input
+                          type="text"
+                          value={bannerForm.title_ru}
+                          onChange={(e) => setBannerForm({...bannerForm, title_ru: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm mb-1">Заголовок (KK) *</label>
+                        <input
+                          type="text"
+                          value={bannerForm.title_kk}
+                          onChange={(e) => setBannerForm({...bannerForm, title_kk: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm mb-1">Описание (RU)</label>
+                        <input
+                          type="text"
+                          value={bannerForm.description_ru}
+                          onChange={(e) => setBannerForm({...bannerForm, description_ru: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm mb-1">Описание (KK)</label>
+                        <input
+                          type="text"
+                          value={bannerForm.description_kk}
+                          onChange={(e) => setBannerForm({...bannerForm, description_kk: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm mb-1">Ссылка (опционально)</label>
+                      <input
+                        type="text"
+                        value={bannerForm.link}
+                        onChange={(e) => setBannerForm({...bannerForm, link: e.target.value})}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm mb-1">Порядок</label>
+                        <input
+                          type="number"
+                          value={bannerForm.order_index}
+                          onChange={(e) => setBannerForm({...bannerForm, order_index: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bannerForm.is_active}
+                            onChange={(e) => setBannerForm({...bannerForm, is_active: e.target.checked})}
+                            className="w-5 h-5"
+                          />
+                          <span className="text-sm">Активен</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveBanner}
+                        className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700"
+                      >
+                        Сохранить
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowBannerForm(false);
+                          setEditingBanner(null);
+                        }}
+                        className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {banners.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <p>Баннеров пока нет</p>
+                    <p className="text-sm mt-2">Добавьте первый баннер для карусели</p>
+                  </div>
+                ) : (
+                  banners.map(banner => (
+                    <div key={banner.id} className="bg-white rounded-lg p-4 shadow-sm">
+                      <div className="flex gap-4">
+                        <img
+                          src={banner.image_url}
+                          alt={banner.title_ru}
+                          className="w-32 h-20 object-cover rounded-lg flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-gray-800 truncate">{banner.title_ru}</h3>
+                              <p className="text-sm text-gray-600 truncate">{banner.title_kk}</p>
+                              {banner.description_ru && (
+                                <p className="text-xs text-gray-500 mt-1 truncate">{banner.description_ru}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                banner.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {banner.is_active ? '✓ Активен' : 'Отключен'}
+                              </span>
+                              <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
+                                #{banner.order_index}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={() => handleEditBanner(banner)}
+                              className="text-sm text-indigo-600 hover:text-indigo-700"
+                            >
+                              Редактировать
+                            </button>
+                            <button
+                              onClick={() => toggleBannerStatus(banner.id, banner.is_active)}
+                              className="text-sm text-gray-600 hover:text-gray-700"
+                            >
+                              {banner.is_active ? 'Отключить' : 'Включить'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBanner(banner.id)}
+                              className="text-sm text-red-600 hover:text-red-700"
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
