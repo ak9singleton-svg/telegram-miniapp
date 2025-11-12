@@ -38,10 +38,205 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .animate-fadeIn {
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    .animate-slideUp {
+      animation: slideUp 0.5s ease-out;
+    }
+    
+    .onboarding-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: white;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  
+  <!-- Onboarding экран -->
+  <div id="onboarding" class="onboarding-overlay" style="display: none;">
+    <div class="animate-slideUp text-center max-w-lg px-6">
+      <!-- Логотип -->
+      <div class="mb-10">
+        <!-- Замените src на URL вашего логотипа -->
+        <img 
+          src="https://via.placeholder.com/120x120/6366f1/ffffff?text=LOGO" 
+          alt="Logo" 
+          class="w-32 h-32 mx-auto rounded-3xl shadow-2xl object-cover"
+          id="onboarding-logo"
+        />
+      </div>
+      
+      <!-- Приветствие -->
+      <h1 class="text-2xl font-semibold text-gray-600 mb-3" id="onboarding-welcome">
+        Добро пожаловать!
+      </h1>
+      
+      <!-- Название компании -->
+      <h2 class="text-4xl font-bold text-gray-800 mb-6" id="onboarding-company">
+        Наша Кондитерская
+      </h2>
+      
+      <!-- Описание -->
+      <p class="text-gray-600 mb-12 text-xl leading-relaxed" id="onboarding-subtitle">
+        Свежая выпечка с доставкой прямо к вашей двери
+      </p>
+      
+      <!-- Преимущества -->
+      <div class="space-y-5 mb-12 text-left">
+        <div class="flex items-start gap-4">
+          <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="text-indigo-600 text-xl font-bold">✓</span>
+          </div>
+          <div>
+            <p class="text-gray-800 font-semibold text-lg" id="onboarding-feature1-title">Широкий ассортимент</p>
+            <p class="text-gray-500 text-base" id="onboarding-feature1-desc">Более 50 видов выпечки</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start gap-4">
+          <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="text-indigo-600 text-xl font-bold">✓</span>
+          </div>
+          <div>
+            <p class="text-gray-800 font-semibold text-lg" id="onboarding-feature2-title">Быстрое оформление</p>
+            <p class="text-gray-500 text-base" id="onboarding-feature2-desc">Заказ за 1 минуту</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start gap-4">
+          <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="text-indigo-600 text-xl font-bold">✓</span>
+          </div>
+          <div>
+            <p class="text-gray-800 font-semibold text-lg" id="onboarding-feature3-title">Отслеживание заказа</p>
+            <p class="text-gray-500 text-base" id="onboarding-feature3-desc">Уведомления в Telegram</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Кнопка -->
+      <button 
+        onclick="closeOnboarding()" 
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-bold text-xl shadow-xl hover:shadow-2xl transition-all transform hover:scale-105"
+        id="onboarding-button"
+      >
+        Начать покупки 🛍️
+      </button>
+    </div>
+  </div>
+  
+  <script>
+    // Тексты для onboarding
+    const onboardingTranslations = {
+      ru: {
+        welcome: 'Добро пожаловать!',
+        company: 'Наша Кондитерская',
+        subtitle: 'Свежая выпечка с доставкой прямо к вашей двери',
+        feature1Title: 'Широкий ассортимент',
+        feature1Desc: 'Более 50 видов выпечки',
+        feature2Title: 'Быстрое оформление',
+        feature2Desc: 'Заказ за 1 минуту',
+        feature3Title: 'Отслеживание заказа',
+        feature3Desc: 'Уведомления в Telegram',
+        button: 'Начать покупки 🛍️'
+      },
+      kk: {
+        welcome: 'Қош келдіңіз!',
+        company: 'Біздің кондитерлік',
+        subtitle: 'Жаңа пісірілген нан өнімдері есігіңізге жеткізіледі',
+        feature1Title: 'Кең ассортимент',
+        feature1Desc: '50-ден астам нан өнімдері',
+        feature2Title: 'Жылдам рәсімдеу',
+        feature2Desc: 'Тапсырыс 1 минутта',
+        feature3Title: 'Тапсырысты қадағалау',
+        feature3Desc: 'Telegram арқылы хабарламалар',
+        button: 'Сатып алуды бастау 🛍️'
+      }
+    };
+    
+    // Определение языка пользователя
+    function detectOnboardingLanguage() {
+      if (window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code === 'kk') {
+        return 'kk';
+      }
+      return 'ru';
+    }
+    
+    // Установка текстов onboarding
+    function setOnboardingLanguage() {
+      const lang = detectOnboardingLanguage();
+      const t = onboardingTranslations[lang];
+      
+      document.getElementById('onboarding-welcome').textContent = t.welcome;
+      document.getElementById('onboarding-company').textContent = t.company;
+      document.getElementById('onboarding-subtitle').textContent = t.subtitle;
+      document.getElementById('onboarding-feature1-title').textContent = t.feature1Title;
+      document.getElementById('onboarding-feature1-desc').textContent = t.feature1Desc;
+      document.getElementById('onboarding-feature2-title').textContent = t.feature2Title;
+      document.getElementById('onboarding-feature2-desc').textContent = t.feature2Desc;
+      document.getElementById('onboarding-feature3-title').textContent = t.feature3Title;
+      document.getElementById('onboarding-feature3-desc').textContent = t.feature3Desc;
+      document.getElementById('onboarding-button').textContent = t.button;
+    }
+    
+    // Проверка первого запуска
+    function checkOnboarding() {
+      const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+      if (!hasSeenOnboarding) {
+        setOnboardingLanguage();
+        document.getElementById('onboarding').style.display = 'flex';
+      }
+    }
+    
+    // Закрытие onboarding
+    function closeOnboarding() {
+      const overlay = document.getElementById('onboarding');
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease-out';
+      
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        localStorage.setItem('hasSeenOnboarding', 'true');
+      }, 300);
+    }
+    
+    // Запускаем проверку при загрузке
+    checkOnboarding();
+  </script>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
@@ -306,7 +501,7 @@
         
         // Toast уведомление
         setToast({
-          message: lang === 'ru' ? '✅ Добавлено в корзину!' : '✅ Себетке қосылды!',
+          message: lang === 'ru' ? 'Добавлено в корзину!' : 'Себетке қосылды!',
           type: 'success'
         });
         setTimeout(() => setToast(null), 2000);
@@ -459,8 +654,8 @@
           // Toast с подсказкой про Telegram
           setToast({
             message: lang === 'ru' 
-              ? '✅ Заказ отправлен! Скоро придёт сообщение в чат с деталями оплаты' 
-              : '✅ Тапсырыс жіберілді! Төлем туралы чатқа жақында хабар келеді',
+              ? 'Заказ отправлен! Скоро придёт сообщение в чат с деталями оплаты' 
+              : 'Тапсырыс жіберілді! Төлем туралы чатқа жақында хабар келеді',
             type: 'success'
           });
           setTimeout(() => setToast(null), 5000);
@@ -468,7 +663,7 @@
         } catch (error) {
           console.error('Ошибка при отправке заказа:', error);
           setToast({
-            message: lang === 'ru' ? '❌ Ошибка при отправке заказа' : '❌ Тапсырысты жіберу қатесі',
+            message: lang === 'ru' ? 'Ошибка при отправке заказа' : 'Тапсырысты жіберу қатесі',
             type: 'error'
           });
           setTimeout(() => setToast(null), 3000);
@@ -823,14 +1018,14 @@
           
           {/* Toast уведомление */}
           {toast && (
-            <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-slideDown">
+            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 animate-slideDown">
               <div className={`${
                 toast.type === 'success' 
-                  ? 'bg-gradient-to-r from-emerald-400 to-cyan-400' 
-                  : 'bg-gradient-to-r from-rose-400 to-pink-400'
-              } text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-2`}>
-                <span className="text-xl">{toast.type === 'success' ? '✅' : '❌'}</span>
-                <span className="font-medium">{toast.message}</span>
+                  ? 'bg-indigo-600' 
+                  : 'bg-rose-500'
+              } text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3`}>
+                <span className="text-2xl">{toast.type === 'success' ? '✅' : '❌'}</span>
+                <span className="font-semibold text-lg">{toast.message}</span>
               </div>
             </div>
           )}
