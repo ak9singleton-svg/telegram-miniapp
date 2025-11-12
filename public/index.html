@@ -4,83 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Кондитерская</title>
+  
+  <!-- Preload критичных ресурсов -->
+  <link rel="preload" href="https://telegram.org/js/telegram-web-app.js" as="script">
+  <link rel="preload" href="https://unpkg.com/react@18/umd/react.production.min.js" as="script">
+  <link rel="preload" href="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" as="script">
+  
+  <!-- Preconnect к CDN и API -->
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://yepbabnubbjzvdjnlfzw.supabase.co">
+  
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-    }
-    
-    @keyframes slideDown {
-      from {
-        opacity: 0;
-        transform: translate(-50%, -20px);
-      }
-      to {
-        opacity: 1;
-        transform: translate(-50%, 0);
-      }
-    }
-    
-    .animate-slideDown {
-      animation: slideDown 0.3s ease-out;
-    }
-    
-    .line-clamp-2 {
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
-    
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    
-    .animate-fadeIn {
-      animation: fadeIn 0.3s ease-out;
-    }
-    
-    .animate-slideUp {
-      animation: slideUp 0.5s ease-out;
-    }
-    
-    .onboarding-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: white;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
+    body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif}
+    @keyframes slideDown{from{opacity:0;transform:translate(-50%,-20px)}to{opacity:1;transform:translate(-50%,0)}}
+    .animate-slideDown{animation:slideDown 0.3s ease-out}
+    .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .animate-fadeIn{animation:fadeIn 0.3s ease-out}
+    .animate-slideUp{animation:slideUp 0.5s ease-out}
+    .onboarding-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:white;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
   </style>
 </head>
 <body>
@@ -93,7 +44,7 @@
       <div class="mb-10">
         <!-- Замените src на URL вашего логотипа -->
         <img 
-          src="https://yepbabnubbjzvdjnlfzw.supabase.co/storage/v1/object/public/LOGO/tinywow_Estrellianlastlogo_71435499.png" 
+          src="https://via.placeholder.com/120x120/6366f1/ffffff?text=LOGO" 
           alt="Logo" 
           class="w-32 h-32 mx-auto rounded-3xl shadow-2xl object-cover"
           id="onboarding-logo"
@@ -440,15 +391,33 @@
 
       const loadBanners = async () => {
         try {
+          // Проверяем кэш
+          const cached = localStorage.getItem('banners_cache');
+          const cacheTime = localStorage.getItem('banners_cache_time');
+          
+          // Если кэш свежий (< 10 минут)
+          if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 600000) {
+            const cachedData = JSON.parse(cached);
+            if (cachedData.length > 0) {
+              setBanners(cachedData);
+              return;
+            }
+          }
+          
+          // Загружаем с сервера
           const { data, error } = await supabase
             .from('banners')
             .select('*')
             .eq('is_active', true)
-            .order('order_index', { ascending: true });
+            .order('order_index', { ascending: true })
+            .limit(10);
 
           if (error) throw error;
           if (data && data.length > 0) {
             setBanners(data);
+            // Сохраняем в кэш
+            localStorage.setItem('banners_cache', JSON.stringify(data));
+            localStorage.setItem('banners_cache_time', Date.now().toString());
           }
         } catch (error) {
           console.log('Баннеры не загружены:', error);
@@ -475,14 +444,33 @@
 
       const loadProducts = async () => {
         try {
+          // Проверяем кэш
+          const cached = localStorage.getItem('products_cache');
+          const cacheTime = localStorage.getItem('products_cache_time');
+          
+          // Если кэш свежий (< 5 минут)
+          if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 300000) {
+            const cachedData = JSON.parse(cached);
+            if (cachedData.length > 0) {
+              setProducts(cachedData);
+              return;
+            }
+          }
+          
+          // Загружаем с сервера
           const { data, error } = await supabase
             .from('products')
             .select('*')
-            .order('created_at', { ascending: false });
+            .eq('available', true)
+            .order('created_at', { ascending: false })
+            .limit(100);
 
           if (error) throw error;
           if (data && data.length > 0) {
             setProducts(data);
+            // Сохраняем в кэш
+            localStorage.setItem('products_cache', JSON.stringify(data));
+            localStorage.setItem('products_cache_time', Date.now().toString());
           }
         } catch (error) {
           console.error('Ошибка загрузки товаров:', error);
@@ -497,7 +485,8 @@
             .from('orders')
             .select('*')
             .eq('telegram_user_id', telegramUser.id)
-            .order('date', { ascending: false });
+            .order('date', { ascending: false })
+            .limit(50);
 
           if (error) throw error;
           setMyOrders(data || []);
@@ -744,9 +733,9 @@
       }
 
       return (
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen bg-gray-50">
           {view === 'catalog' && (
-            <div className="pb-20 bg-gray-50">
+            <div className="pb-20">
               <div className="bg-white shadow-sm sticky top-0 z-10">
                 <div className="px-4 py-4">
                   <div className="flex items-center justify-between mb-4">
