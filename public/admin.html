@@ -82,6 +82,20 @@
       const [orderFilter, setOrderFilter] = useState('all');
       const [categoryFilter, setCategoryFilter] = useState('all');  // Фильтр категорий товаров
 
+      // Функция форматирования времени (UTC → Астана UTC+5)
+      const formatDateTime = (utcDate) => {
+        if (!utcDate) return '';
+        const date = new Date(utcDate);
+        return date.toLocaleString('ru-RU', {
+          timeZone: 'Asia/Almaty',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
       useEffect(() => {
         if (window.Telegram?.WebApp) {
           const tg = window.Telegram.WebApp;
@@ -906,7 +920,7 @@
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <p className="font-bold text-gray-800">Заказ #{order.id.slice(-6)}</p>
-                          <p className="text-xs text-gray-500">{new Date(order.date).toLocaleString('ru-RU')}</p>
+                          <p className="text-xs text-gray-500">{formatDateTime(order.date)}</p>
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
                           {getStatusText(order.status)}
