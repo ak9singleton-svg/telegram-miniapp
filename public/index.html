@@ -332,6 +332,20 @@
 
       const t = translations[lang]; // Текущие переводы
 
+      // Функция форматирования времени (UTC → Астана UTC+5)
+      const formatDateTime = (utcDate) => {
+        if (!utcDate) return '';
+        const date = new Date(utcDate);
+        return date.toLocaleString(lang === 'kk' ? 'kk-KZ' : 'ru-RU', {
+          timeZone: 'Asia/Almaty',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
       useEffect(() => {
         if (window.Telegram?.WebApp) {
           const tg = window.Telegram.WebApp;
@@ -510,7 +524,7 @@
         
         // Toast уведомление
         setToast({
-          message: lang === 'ru' ? 'Добавлено в корзину!' : 'Себетке қосылды!',
+          message: lang === 'ru' ? '✅ Добавлено в корзину!' : '✅ Себетке қосылды!',
           type: 'success'
         });
         setTimeout(() => setToast(null), 2000);
@@ -663,8 +677,8 @@
           // Toast с подсказкой про Telegram
           setToast({
             message: lang === 'ru' 
-              ? 'Заказ отправлен! Скоро придёт сообщение в чат с деталями оплаты' 
-              : 'Тапсырыс жіберілді! Төлем туралы чатқа жақында хабар келеді',
+              ? '✅ Заказ отправлен! Скоро придёт сообщение в чат с деталями оплаты' 
+              : '✅ Тапсырыс жіберілді! Төлем туралы чатқа жақында хабар келеді',
             type: 'success'
           });
           setTimeout(() => setToast(null), 5000);
@@ -672,7 +686,7 @@
         } catch (error) {
           console.error('Ошибка при отправке заказа:', error);
           setToast({
-            message: lang === 'ru' ? 'Ошибка при отправке заказа' : 'Тапсырысты жіберу қатесі',
+            message: lang === 'ru' ? '❌ Ошибка при отправке заказа' : '❌ Тапсырысты жіберу қатесі',
             type: 'error'
           });
           setTimeout(() => setToast(null), 3000);
@@ -895,7 +909,7 @@
                           <div>
                             <p className="font-bold text-gray-800">{lang === 'kk' ? 'Тапсырыс' : 'Заказ'} #{order.id.slice(-6)}</p>
                             <p className="text-xs text-gray-500">
-                              {new Date(order.date).toLocaleDateString(lang === 'kk' ? 'kk-KZ' : 'ru-RU')}
+                              {formatDateTime(order.date)}
                             </p>
                           </div>
                           <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.color}`}>
