@@ -35,6 +35,20 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // Хранилище для временных данных (orderId -> userId)
 const pendingReceipts = new Map();
 
+// Функция форматирования времени (UTC → Астана UTC+5)
+const formatDateTimeAstana = (utcDate) => {
+  if (!utcDate) return 'Неизвестно';
+  const date = new Date(utcDate);
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'Asia/Almaty',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 // API: Отправка заказа в Telegram
 app.post('/api/send-order', async (req, res) => {
   try {
@@ -60,7 +74,7 @@ app.post('/api/send-order', async (req, res) => {
     // Формируем сообщение админу
     let message = "🆕 <b>НОВЫЙ ЗАКАЗ!</b>\n\n";
     message += `📋 Заказ #${orderId.slice(-6)}\n`;
-    message += `📅 ${new Date(date).toLocaleString('ru-RU')}\n\n`;
+    message += `📅 ${formatDateTimeAstana(date)}\n\n`;
     
     message += "<b>👤 Клиент:</b>\n";
     message += `Имя: ${customerName}\n`;
@@ -519,7 +533,7 @@ Mini App ашып, жаңа пісірілген өнімдерді есігің
             const orders = customer.total_orders || 0;
             const spent = customer.total_spent || 0;
             const lastOrder = customer.last_order_date 
-              ? new Date(customer.last_order_date).toLocaleDateString('ru-RU')
+              ? formatDateTimeAstana(customer.last_order_date)
               : 'Неизвестно';
 
             customersText += `${index + 1}. <b>${name}</b> ${username}\n`;
@@ -742,7 +756,7 @@ Mini App ашып, жаңа пісірілген өнімдерді есігің
           `💰 Сумма: ${order?.total?.toLocaleString() || 0}₸\n\n` +
           `📦 <b>Состав заказа:</b>\n${itemsList || 'Нет товаров'}\n\n` +
           `💬 Комментарий: ${order?.customer_comment || 'Нет'}\n\n` +
-          `⏰ Дата: ${order?.date ? new Date(order.date).toLocaleString('ru-RU') : 'Неизвестно'}`;
+          `⏰ Дата: ${formatDateTimeAstana(order?.date)}`;
 
         // Уведомляем админа с полной информацией
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
