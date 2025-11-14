@@ -410,7 +410,7 @@
           const cacheTime = localStorage.getItem('banners_cache_time');
           
           // Если кэш свежий (< 10 минут)
-          if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 600000) {
+          if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 120000) {
             const cachedData = JSON.parse(cached);
             if (cachedData.length > 0) {
               setBanners(cachedData);
