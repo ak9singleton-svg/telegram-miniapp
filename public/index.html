@@ -176,7 +176,7 @@
       const [settings, setSettings] = useState(null);
       const [lang, setLang] = useState('ru'); // Текущий язык
       const [toast, setToast] = useState(null); // Toast уведомления
-      const [lastOrder, setLastOrder] = useState(null); // Последний оформленный заказ
+      const [lastOrder, setLastOrder] = useState(null); // Последний заказ для экрана подтверждения
       const [orderForm, setOrderForm] = useState({
         name: '',
         phone: '',
@@ -184,6 +184,20 @@
       });
 
       const t = translations[lang]; // Текущие переводы
+
+      // Функция форматирования времени для Астаны
+      const formatDateTime = (utcDate) => {
+        if (!utcDate) return '';
+        const date = new Date(utcDate);
+        return date.toLocaleString(lang === 'kk' ? 'kk-KZ' : 'ru-RU', {
+          timeZone: 'Asia/Almaty',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
 
       useEffect(() => {
         if (window.Telegram?.WebApp) {
@@ -457,7 +471,7 @@
           
           setCart([]);
           setOrderForm({ ...orderForm, comment: '' });
-          setView('confirmation'); // Показываем экран подтверждения
+          setView('confirmation'); // Показываем экран подтверждения вместо catalog
           await loadMyOrders();
           
         } catch (error) {
@@ -819,25 +833,27 @@
           {/* Экран подтверждения заказа */}
           {view === 'confirmation' && lastOrder && (
             <div className="min-h-screen flex flex-col items-center justify-center p-6">
-              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                <svg width="48" height="48" fill="none" stroke="#10b981" strokeWidth="3" viewBox="0 0 24 24">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
+              {/* Иконка успеха */}
+              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+                <div className="text-6xl text-green-600">✓</div>
               </div>
               
+              {/* Заголовок */}
               <h2 className="text-2xl font-bold text-gray-800 mb-3">
                 {lang === 'kk' ? 'Тапсырысыңызға рахмет!' : 'Спасибо за заказ!'}
               </h2>
               
-              <p className="text-gray-600 text-center mb-6">
+              {/* Описание */}
+              <p className="text-gray-600 text-center mb-6 max-w-sm">
                 {lang === 'kk' 
                   ? 'Тапсырысыңызды алдық, жақын арада хабарласамыз.'
                   : 'Мы получили ваш заказ и скоро свяжемся с вами.'}
               </p>
               
+              {/* Инфо про оплату */}
               {settings?.payment_enabled && (
-                <div className="bg-indigo-50 p-4 rounded-lg mb-6 w-full max-w-md">
-                  <p className="text-sm text-indigo-800 text-center">
+                <div className="bg-blue-50 p-4 rounded-lg mb-6 w-full max-w-md">
+                  <p className="text-sm text-blue-800 text-center">
                     📱 {lang === 'kk' 
                       ? 'Төлем үшін деректемелер ботқа жеке хабарларға жіберілді'
                       : 'Реквизиты для оплаты отправлены вам в личные сообщения бота'}
@@ -845,6 +861,7 @@
                 </div>
               )}
               
+              {/* Детали заказа */}
               <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md mb-6">
                 <h3 className="font-bold text-gray-800 mb-2">
                   {lang === 'kk' ? 'Тапсырыс' : 'Заказ'} #{lastOrder.id.slice(-6)}
@@ -868,9 +885,10 @@
                 </div>
               </div>
               
+              {/* Кнопка возврата */}
               <button 
                 onClick={() => setView('catalog')}
-                className="w-full max-w-md bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg"
+                className="w-full max-w-md bg-gray-700 text-white py-4 rounded-xl font-bold hover:bg-gray-800 transition shadow-lg"
               >
                 {lang === 'kk' ? 'Каталогқа оралу' : 'Вернуться в каталог'}
               </button>
