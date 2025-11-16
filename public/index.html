@@ -694,8 +694,8 @@
           
           setToast({
             message: lang === 'ru' 
-              ? `✅ Заказ #${order.id.slice(-6)} оформлен!\n\n${orderDetails}\n\nИтого: ${order.total}₸\n\n📱 Реквизиты для оплаты отправлены в чат` 
-              : `✅ Тапсырыс #${order.id.slice(-6)} жасалды!\n\n${orderDetails}\n\nБарлығы: ${order.total}₸\n\n📱 Төлем деректемелері чатқа жіберілді`,
+              ? `Заказ #${order.id.slice(-6)} оформлен!\n\n${orderDetails}\n\nИтого: ${order.total}₸\n\n📱 Реквизиты для оплаты отправлены в чат` 
+              : `Тапсырыс #${order.id.slice(-6)} жасалды!\n\n${orderDetails}\n\nБарлығы: ${order.total}₸\n\n📱 Төлем деректемелері чатқа жіберілді`,
             type: 'success'
           });
           setTimeout(() => setToast(null), 8000);
@@ -973,7 +973,7 @@
           )}
 
           {view === 'cart' && (
-            <div className="p-4">
+            <div className="p-4 pb-24">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">{t.cart}</h2>
               {cart.length === 0 ? (
                 <div className="text-center py-12">
@@ -1021,7 +1021,7 @@
           )}
 
           {view === 'checkout' && (
-            <div className="p-4">
+            <div className="p-4 pb-24">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">{t.checkoutTitle}</h2>
               
               {settings?.payment_enabled && (
@@ -1137,7 +1137,7 @@
           
           {/* Профиль */}
           {view === 'profile' && (
-            <div className="p-4 pb-20">
+            <div className="p-4 pb-24">
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 {lang === 'kk' ? 'Профиль' : 'Профиль'}
               </h2>
