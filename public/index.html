@@ -694,8 +694,8 @@
           
           setToast({
             message: lang === 'ru' 
-              ? `Заказ #${order.id.slice(-6)} оформлен!\n\n${orderDetails}\n\nИтого: ${order.total}₸\n\n📱 Реквизиты для оплаты отправлены в чат` 
-              : `Тапсырыс #${order.id.slice(-6)} жасалды!\n\n${orderDetails}\n\nБарлығы: ${order.total}₸\n\n📱 Төлем деректемелері чатқа жіберілді`,
+              ? `✅ Заказ #${order.id.slice(-6)} оформлен!\n\n${orderDetails}\n\nИтого: ${order.total}₸\n\n📱 Реквизиты для оплаты отправлены в чат` 
+              : `✅ Тапсырыс #${order.id.slice(-6)} жасалды!\n\n${orderDetails}\n\nБарлығы: ${order.total}₸\n\n📱 Төлем деректемелері чатқа жіберілді`,
             type: 'success'
           });
           setTimeout(() => setToast(null), 8000);
@@ -769,7 +769,7 @@
         <div className="min-h-screen bg-gray-50">
           {view === 'catalog' && (
             <div className="pb-20">
-              <div className="bg-white shadow-sm sticky top-0 z-10">
+              <div className="bg-white shadow-sm">
                 <div className="px-4 py-4">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3 flex-1">
@@ -873,20 +873,23 @@
                       )}
                     </div>
                   )}
-                  
-                  <div className="flex gap-2 overflow-x-auto pb-2 px-4">
-                    {categories.map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-4 py-2 rounded-full whitespace-nowrap ${
-                          selectedCategory === cat ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {cat === 'all' ? t.all : cat}
-                      </button>
-                    ))}
-                  </div>
+                </div>
+              </div>
+              
+              {/* Категории - sticky */}
+              <div className="bg-white sticky top-0 z-10 shadow-sm">
+                <div className="flex gap-2 overflow-x-auto pb-2 px-4 pt-2">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-4 py-2 rounded-full whitespace-nowrap ${
+                        selectedCategory === cat ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {cat === 'all' ? t.all : cat}
+                    </button>
+                  ))}
                 </div>
               </div>
 
